@@ -2,7 +2,7 @@
 
 **[中文文档](README_zh.md)** | English
 
-A professional command-line tool for organizing photos and videos by their creation time. Built with Rust for high performance and reliability.
+A command-line tool for organizing photos and videos by their creation time. Built with Rust for high performance and reliability.
 
 ## Features
 
