@@ -175,22 +175,22 @@ jobs:
         run: |
           cd release
           if [ "$RUNNER_OS" == "Windows" ]; then
-            7z a -tzip ../${{ matrix.asset_name }}.zip .
+            7z a -tzip ../${{ matrix.asset_name }}-${{ needs.prepare.outputs.version }}.zip .
           else
-            zip -r ../${{ matrix.asset_name }}.zip .
+            zip -r ../${{ matrix.asset_name }}-${{ needs.prepare.outputs.version }}.zip .
           fi
 
       - name: Create archive (Linux)
         if: matrix.archive_ext == 'tar.gz'
         run: |
           cd release
-          tar -czvf ../${{ matrix.asset_name }}.tar.gz .
+          tar -czvf ../${{ matrix.asset_name }}-${{ needs.prepare.outputs.version }}.tar.gz .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.asset_name }}
-          path: ${{ matrix.asset_name }}.${{ matrix.archive_ext }}
+          name: ${{ matrix.asset_name }}-${{ needs.prepare.outputs.version }}
+          path: ${{ matrix.asset_name }}-${{ needs.prepare.outputs.version }}.${{ matrix.archive_ext }}
           retention-days: 1
 
   # Release job - creates GitHub release and uploads assets
@@ -239,12 +239,12 @@ jobs:
           echo "" >> CHANGELOG.md
           echo "| Platform | Architecture | Download |" >> CHANGELOG.md
           echo "|----------|--------------|----------|" >> CHANGELOG.md
-          echo "| Windows | x64 | \`gallery-sorter-windows-x64.zip\` |" >> CHANGELOG.md
-          echo "| Windows | ARM64 | \`gallery-sorter-windows-arm64.zip\` |" >> CHANGELOG.md
-          echo "| macOS | x64 (Intel) | \`gallery-sorter-macos-x64.zip\` |" >> CHANGELOG.md
-          echo "| macOS | ARM64 (Apple Silicon) | \`gallery-sorter-macos-arm64.zip\` |" >> CHANGELOG.md
-          echo "| Linux | x64 | \`gallery-sorter-linux-x64.tar.gz\` |" >> CHANGELOG.md
-          echo "| Linux | ARM64 | \`gallery-sorter-linux-arm64.tar.gz\` |" >> CHANGELOG.md
+          echo "| Windows | x64 | \`gallery-sorter-windows-x64-${VERSION}.zip\` |" >> CHANGELOG.md
+          echo "| Windows | ARM64 | \`gallery-sorter-windows-arm64-${VERSION}.zip\` |" >> CHANGELOG.md
+          echo "| macOS | x64 (Intel) | \`gallery-sorter-macos-x64-${VERSION}.zip\` |" >> CHANGELOG.md
+          echo "| macOS | ARM64 (Apple Silicon) | \`gallery-sorter-macos-arm64-${VERSION}.zip\` |" >> CHANGELOG.md
+          echo "| Linux | x64 | \`gallery-sorter-linux-x64-${VERSION}.tar.gz\` |" >> CHANGELOG.md
+          echo "| Linux | ARM64 | \`gallery-sorter-linux-arm64-${VERSION}.tar.gz\` |" >> CHANGELOG.md
 
           echo "" >> CHANGELOG.md
           echo "---" >> CHANGELOG.md
@@ -261,25 +261,26 @@ jobs:
           draft: false
           prerelease: ${{ github.event.inputs.prerelease == 'true' }}
           files: |
-            artifacts/gallery-sorter-windows-x64/gallery-sorter-windows-x64.zip
-            artifacts/gallery-sorter-windows-arm64/gallery-sorter-windows-arm64.zip
-            artifacts/gallery-sorter-macos-x64/gallery-sorter-macos-x64.zip
-            artifacts/gallery-sorter-macos-arm64/gallery-sorter-macos-arm64.zip
-            artifacts/gallery-sorter-linux-x64/gallery-sorter-linux-x64.tar.gz
-            artifacts/gallery-sorter-linux-arm64/gallery-sorter-linux-arm64.tar.gz
+            artifacts/gallery-sorter-windows-x64-${{ needs.prepare.outputs.version }}/gallery-sorter-windows-x64-${{ needs.prepare.outputs.version }}.zip
+            artifacts/gallery-sorter-windows-arm64-${{ needs.prepare.outputs.version }}/gallery-sorter-windows-arm64-${{ needs.prepare.outputs.version }}.zip
+            artifacts/gallery-sorter-macos-x64-${{ needs.prepare.outputs.version }}/gallery-sorter-macos-x64-${{ needs.prepare.outputs.version }}.zip
+            artifacts/gallery-sorter-macos-arm64-${{ needs.prepare.outputs.version }}/gallery-sorter-macos-arm64-${{ needs.prepare.outputs.version }}.zip
+            artifacts/gallery-sorter-linux-x64-${{ needs.prepare.outputs.version }}/gallery-sorter-linux-x64-${{ needs.prepare.outputs.version }}.tar.gz
+            artifacts/gallery-sorter-linux-arm64-${{ needs.prepare.outputs.version }}/gallery-sorter-linux-arm64-${{ needs.prepare.outputs.version }}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Summary
         run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
           echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ needs.prepare.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Artifacts uploaded:" >> $GITHUB_STEP_SUMMARY
-          echo "- gallery-sorter-windows-x64.zip" >> $GITHUB_STEP_SUMMARY
-          echo "- gallery-sorter-windows-arm64.zip" >> $GITHUB_STEP_SUMMARY
-          echo "- gallery-sorter-macos-x64.zip" >> $GITHUB_STEP_SUMMARY
-          echo "- gallery-sorter-macos-arm64.zip" >> $GITHUB_STEP_SUMMARY
-          echo "- gallery-sorter-linux-x64.tar.gz" >> $GITHUB_STEP_SUMMARY
-          echo "- gallery-sorter-linux-arm64.tar.gz" >> $GITHUB_STEP_SUMMARY
+          echo "- gallery-sorter-windows-x64-${VERSION}.zip" >> $GITHUB_STEP_SUMMARY
+          echo "- gallery-sorter-windows-arm64-${VERSION}.zip" >> $GITHUB_STEP_SUMMARY
+          echo "- gallery-sorter-macos-x64-${VERSION}.zip" >> $GITHUB_STEP_SUMMARY
+          echo "- gallery-sorter-macos-arm64-${VERSION}.zip" >> $GITHUB_STEP_SUMMARY
+          echo "- gallery-sorter-linux-x64-${VERSION}.tar.gz" >> $GITHUB_STEP_SUMMARY
+          echo "- gallery-sorter-linux-arm64-${VERSION}.tar.gz" >> $GITHUB_STEP_SUMMARY
