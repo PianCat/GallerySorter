@@ -1,0 +1,144 @@
+# Gallery Sorter Configuration Template
+# =====================================
+# This is a sample configuration file for Gallery Sorter.
+# Copy this file and modify values according to your needs.
+#
+# Usage: ./gallery-sorter -c Template
+#        (or ./gallery-sorter -c Config/Template.toml)
+#
+# Documentation: See README.md for detailed explanations.
+
+# ============================================================
+# INPUT/OUTPUT DIRECTORIES
+# ============================================================
+
+# Input directories to scan for media files
+# Supports multiple directories - use semicolon to separate
+# Examples:
+#   - Camera SD card import folder
+#   - Phone backup folder
+#   - Downloaded photos folder
+input_dirs = [
+    "D:/DCIM",
+    # "D:/Camera",
+    # "E:/Phone Backup/Camera",
+]
+
+# Output directory for organized files
+# Files will be organized into subdirectories based on classification rule
+output_dir = "D:/Photos/Sorted"
+
+# ============================================================
+# PROCESSING MODE
+# ============================================================
+
+# Processing mode determines how files are handled:
+#
+# "incremental" (recommended for regular use)
+#   - Only processes files newer than the newest file in target
+#   - Most efficient for ongoing photo imports
+#   - Maintains a watermark file to track progress
+#
+# "supplement"
+#   - Processes all files but skips existing ones with same content
+#   - Good for merging photo collections
+#
+# "full"
+#   - Processes all files, overwrites existing files in target
+#   - Use for initial organization or re-organizing
+#   - Caution: May overwrite files!
+#
+processing_mode = "incremental"
+
+# ============================================================
+# FILE ORGANIZATION
+# ============================================================
+
+# Classification rule for organizing files:
+#
+# "year-month" - Organize by year and month (e.g., 2024/10/)
+# "year"       - Organize by year only (e.g., 2024/)
+# "none"       - No subdirectories, all files in output root
+#
+classification = "year-month"
+
+# Month format (only applies when classification = "year-month"):
+#
+# "nested"   - Creates YYYY/MM/ structure (e.g., 2024/10/)
+# "combined" - Creates YYYY-MM/ structure (e.g., 2024-10/)
+#
+month_format = "nested"
+
+# ============================================================
+# FILE OPERATION
+# ============================================================
+
+# How to transfer files from source to destination:
+#
+# "copy"     - Copy files (keeps originals)
+# "move"     - Move files (removes originals after successful transfer)
+# "hardlink" - Create hard links (same content, no extra disk space)
+#              Only works on the same filesystem
+# "symlink"  - Create symbolic links (requires admin privileges on Windows)
+#
+operation = "copy"
+
+# ============================================================
+# DEDUPLICATION
+# ============================================================
+
+# Enable content-based deduplication using xxHash
+# When enabled:
+#   - Files with identical content are detected
+#   - The file with the cleanest filename is kept
+#   - Duplicate files are skipped
+#
+# Disable if you're certain there are no duplicates (faster processing)
+#
+deduplicate = true
+
+# ============================================================
+# ADVANCED OPTIONS
+# ============================================================
+
+# Number of threads for parallel processing
+# 0 = auto-detect (uses all available CPU cores)
+# Set to a specific number to limit CPU usage
+threads = 0
+
+# Large file threshold in bytes
+# Files larger than this use sampled hashing (faster but less accurate)
+# Default: 100MB = 104857600 bytes
+large_file_threshold = 104857600
+
+# State file path for incremental processing
+# Leave commented to use default: output_dir/.gallery_sorter_state.json
+# state_file = "D:/Photos/.gallery_sorter_state.json"
+
+# ============================================================
+# PREVIEW & DEBUG
+# ============================================================
+
+# Dry run mode - shows what would be done without actually doing it
+# Useful for previewing changes before committing
+dry_run = false
+
+# Verbose output - shows detailed processing information
+# Useful for debugging or understanding what's happening
+verbose = false
+
+# ============================================================
+# SUPPORTED FILE EXTENSIONS (optional customization)
+# ============================================================
+
+# Uncomment and modify to customize supported formats
+# Most users don't need to change these
+
+# Image formats with EXIF support
+# image_extensions = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "avif", "tiff", "tif"]
+
+# Video formats (metadata extracted via FFprobe)
+# video_extensions = ["mp4", "mov", "avi", "mkv", "wmv", "flv", "m4v", "3gp"]
+
+# RAW image formats from various camera manufacturers
+# raw_extensions = ["raw", "arw", "cr2", "cr3", "nef", "orf", "rw2", "dng", "raf", "srw", "pef"]
