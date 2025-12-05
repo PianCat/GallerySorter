@@ -44,6 +44,28 @@ pub enum MonthFormat {
     Combined,
 }
 
+/// File type for classification
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileType {
+    /// Photo files (jpg, png, etc.)
+    Photos,
+    /// Video files (mp4, mov, etc.)
+    Videos,
+    /// RAW image files (arw, cr2, etc.) - nested under Photos
+    Raw,
+}
+
+impl FileType {
+    /// Get the folder name for this file type
+    pub fn folder_name(&self) -> &'static str {
+        match self {
+            FileType::Photos => "Photos",
+            FileType::Videos => "Videos",
+            FileType::Raw => "Raw",
+        }
+    }
+}
+
 /// File operation mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, clap::ValueEnum)]
 #[serde(rename_all = "lowercase")]
@@ -76,6 +98,10 @@ pub struct Config {
 
     /// Month format for year-month classification
     pub month_format: MonthFormat,
+
+    /// Classify by file type (adds Photos/Videos subdirectory, RAW files nested under Photos/Raw)
+    #[serde(default)]
+    pub classify_by_type: bool,
 
     /// File operation mode
     pub operation: FileOperation,
@@ -116,6 +142,7 @@ impl Default for Config {
             processing_mode: ProcessingMode::default(),
             classification: ClassificationRule::default(),
             month_format: MonthFormat::default(),
+            classify_by_type: false,
             operation: FileOperation::default(),
             deduplicate: true,
             state_file: None,
@@ -214,6 +241,20 @@ impl Config {
         self.is_image(ext) || self.is_video(ext)
     }
 
+    /// Get the file type for a given extension
+    pub fn get_file_type(&self, ext: &str) -> Option<FileType> {
+        let ext_lower = ext.to_lowercase();
+        if self.raw_extensions.iter().any(|e| e == &ext_lower) {
+            Some(FileType::Raw)
+        } else if self.video_extensions.iter().any(|e| e == &ext_lower) {
+            Some(FileType::Videos)
+        } else if self.image_extensions.iter().any(|e| e == &ext_lower) {
+            Some(FileType::Photos)
+        } else {
+            None
+        }
+    }
+
     /// Get state file path, using default if not specified
     pub fn get_state_file(&self) -> PathBuf {
         self.state_file
@@ -292,6 +333,11 @@ classification = "year-month"
 # - nested: YYYY/MM/
 # - combined: YYYY-MM/
 month_format = "nested"
+
+# Classify by file type (adds Photos/Videos subdirectory, RAW files nested under Photos/Raw)
+# - false: 2024/01/photo.jpg (default)
+# - true: 2024/01/Photos/photo.jpg, 2024/01/Photos/Raw/photo.arw
+classify_by_type = false
 
 # File operation: "copy", "move", "symlink", or "hardlink"
 operation = "copy"

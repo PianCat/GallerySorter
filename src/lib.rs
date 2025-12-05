@@ -21,8 +21,8 @@ pub mod state;
 pub mod time;
 
 pub use cli::Cli;
-pub use config::{ClassificationRule, Config, ConfigError, MonthFormat, ProcessingMode};
+pub use config::{ClassificationRule, Config, ConfigError, FileType, MonthFormat, ProcessingMode};
 pub use error::{Error, Result};
-pub use interactive::{InteractiveAction, InteractiveWizard, ProgressDisplay, should_run_interactive, display_summary};
+pub use interactive::{InteractiveAction, InteractiveResult, InteractiveWizard, ProgressDisplay, should_run_interactive, display_summary};
 pub use process::Processor;
 pub use state::{IncrementalWatermark, ProcessingState};

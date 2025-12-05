@@ -44,6 +44,10 @@ pub struct Cli {
     #[arg(short = 'm', long, value_enum)]
     pub month_format: Option<MonthFormat>,
 
+    /// Classify by file type (adds Images/Videos/RAW subdirectory)
+    #[arg(long)]
+    pub classify_by_type: bool,
+
     /// File operation mode
     #[arg(short = 'O', long, value_enum)]
     pub operation: Option<FileOperation>,
@@ -106,6 +110,9 @@ impl Cli {
         if let Some(month_format) = self.month_format {
             config.month_format = month_format;
         }
+        if self.classify_by_type {
+            config.classify_by_type = true;
+        }
         if let Some(operation) = self.operation {
             config.operation = operation;
         }
@@ -154,6 +161,7 @@ impl Cli {
         if let Some(month_format) = self.month_format {
             config.month_format = month_format;
         }
+        config.classify_by_type = self.classify_by_type;
         if let Some(operation) = self.operation {
             config.operation = operation;
         }

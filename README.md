@@ -106,6 +106,7 @@ This launches an interactive wizard to configure and run the sorter.
 | `--mode` | `-m` | Processing mode: `full`, `supplement`, `incremental` |
 | `--classify` | | Classification: `none`, `year`, `year-month` |
 | `--month-format` | | Month format: `nested`, `combined` |
+| `--classify-by-type` | | Add file type subdirectory (Images/Videos/RAW) |
 | `--operation` | | File operation: `copy`, `move`, `hardlink`, `symlink` |
 | `--deduplicate` | | Enable deduplication |
 | `--no-deduplicate` | | Disable deduplication |
@@ -137,6 +138,9 @@ classification = "year-month"
 
 # Month format: "nested" (YYYY/MM/) or "combined" (YYYY-MM/)
 month_format = "nested"
+
+# Classify by file type (adds Images/Videos/RAW subdirectory)
+classify_by_type = false
 
 # File operation: "copy", "move", "hardlink", "symlink"
 operation = "copy"
@@ -203,6 +207,7 @@ Duplicate indicators recognized:
 
 ## Output Structure
 
+Default structure (classify_by_type = false):
 ```
 Output Directory/
 ├── .gallery_sorter_increment_metadata.toml  # Watermark file (incremental mode)
@@ -218,12 +223,25 @@ Output Directory/
         └── photo.heic
 ```
 
+With file type classification (classify_by_type = true):
+```
+Output Directory/
+├── 2024/
+│   └── 01/
+│       ├── Photos/
+│       │   ├── IMG_20240115_143022.jpg
+│       │   └── Raw/
+│       │       └── DSC_0001.arw
+│       └── Videos/
+│           └── VID_20240120_183045.mp4
+```
+
 ## Logs
 
 Log files are saved in the `Log/` directory next to the executable:
-- Interactive mode: `Interactive_YYYYMMDD_HHMMSS.log`
-- CLI with config: `ConfigName.log`
-- CLI without config: `CLIRun_YYYYMMDD_HHMMSS.log`
+- Interactive mode: `Log/Interactive_YYYYMMDD_HHMMSS.log`
+- CLI with config: `Log/ConfigName/ConfigName_YYYYMMDD_HHMMSS.log`
+- CLI without config: `Log/CLIRun_YYYYMMDD_HHMMSS.log`
 
 ## Performance Tips
 

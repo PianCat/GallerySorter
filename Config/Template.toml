@@ -69,6 +69,19 @@ classification = "year-month"
 #
 month_format = "nested"
 
+# Classify by file type - adds an additional subdirectory layer based on file type
+#
+# When disabled (default):
+#   2024/10/photo.jpg
+#   2024/10/video.mp4
+#
+# When enabled:
+#   2024/10/Photos/photo.jpg
+#   2024/10/Photos/Raw/photo.arw
+#   2024/10/Videos/video.mp4
+#
+classify_by_type = false
+
 # ============================================================
 # FILE OPERATION
 # ============================================================

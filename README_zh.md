@@ -106,6 +106,7 @@ cargo build --release
 | `--mode` | `-m` | 处理模式：`full`、`supplement`、`incremental` |
 | `--classify` | | 分类规则：`none`、`year`、`year-month` |
 | `--month-format` | | 月份格式：`nested`、`combined` |
+| `--classify-by-type` | | 按文件类型分类（添加 Images/Videos/RAW 子目录） |
 | `--operation` | | 文件操作：`copy`、`move`、`hardlink`、`symlink` |
 | `--deduplicate` | | 启用去重 |
 | `--no-deduplicate` | | 禁用去重 |
@@ -137,6 +138,9 @@ classification = "year-month"
 
 # 月份格式："nested"（YYYY/MM/）或 "combined"（YYYY-MM/）
 month_format = "nested"
+
+# 按文件类型分类（在时间目录后添加 Images/Videos/RAW 子目录）
+classify_by_type = false
 
 # 文件操作："copy"、"move"、"hardlink"、"symlink"
 operation = "copy"
@@ -203,6 +207,7 @@ dry_run = false
 
 ## 输出目录结构
 
+默认结构（classify_by_type = false）：
 ```
 输出目录/
 ├── .gallery_sorter_increment_metadata.toml  # 水位线文件（增量模式）
@@ -218,12 +223,25 @@ dry_run = false
         └── photo.heic
 ```
 
+启用文件类型分类后（classify_by_type = true）：
+```
+输出目录/
+├── 2024/
+│   └── 01/
+│       ├── Photos/
+│       │   ├── IMG_20240115_143022.jpg
+│       │   └── Raw/
+│       │       └── DSC_0001.arw
+│       └── Videos/
+│           └── VID_20240120_183045.mp4
+```
+
 ## 日志文件
 
 日志文件保存在程序同目录下的 `Log/` 文件夹中：
-- 交互式模式：`Interactive_YYYYMMDD_HHMMSS.log`
-- 使用配置文件的命令行模式：`配置名称.log`
-- 不使用配置文件的命令行模式：`CLIRun_YYYYMMDD_HHMMSS.log`
+- 交互式模式：`Log/Interactive_YYYYMMDD_HHMMSS.log`
+- 使用配置文件的命令行模式：`Log/配置名称/配置名称_YYYYMMDD_HHMMSS.log`
+- 不使用配置文件的命令行模式：`Log/CLIRun_YYYYMMDD_HHMMSS.log`
 
 ## 性能优化建议
 

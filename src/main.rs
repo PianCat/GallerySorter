@@ -9,7 +9,7 @@ use chrono::Local;
 use clap::Parser;
 use console::style;
 use gallery_sorter::{
-    display_summary, should_run_interactive, Cli, Config, InteractiveWizard, Processor,
+    display_summary, should_run_interactive, Cli, Config, InteractiveResult, InteractiveWizard, Processor,
 };
 use gallery_sorter::i18n::Strings;
 use std::path::PathBuf;
@@ -32,18 +32,27 @@ fn run_interactive_mode() -> Result<()> {
     let wizard = InteractiveWizard::new();
 
     // Run configuration wizard
-    let config = match wizard.run()? {
-        Some(config) => config,
+    let InteractiveResult { config, config_name } = match wizard.run()? {
+        Some(result) => result,
         None => return Ok(()), // User cancelled
     };
 
     // Get the executable directory for Log directory
     let exe_dir = get_executable_dir()?;
     let log_dir = exe_dir.join("Log");
-    std::fs::create_dir_all(&log_dir)?;
-
     let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-    let log_path = log_dir.join(format!("Interactive_{}.log", timestamp));
+
+    // Determine log path based on whether config was used
+    let log_path = if let Some(ref name) = config_name {
+        // Config-based run: Log/ConfigName/ConfigName_YYYYMMDD_HHMMSS.log
+        let config_log_dir = log_dir.join(name);
+        std::fs::create_dir_all(&config_log_dir)?;
+        config_log_dir.join(format!("{}_{}.log", name, timestamp))
+    } else {
+        // Direct input run: Log/Interactive_YYYYMMDD_HHMMSS.log
+        std::fs::create_dir_all(&log_dir)?;
+        log_dir.join(format!("Interactive_{}.log", timestamp))
+    };
 
     // Setup file-only logging (no console output for interactive mode)
     let _guard = setup_file_only_logging(&log_path)?;
@@ -224,17 +233,20 @@ fn get_executable_dir() -> Result<PathBuf> {
 /// Determine the log file path based on config file or timestamp
 fn get_log_path(exe_dir: &PathBuf, cli: &Cli) -> PathBuf {
     let log_dir = exe_dir.join("Log");
+    let timestamp = Local::now().format("%Y%m%d_%H%M%S");
 
-    let log_filename = if let Some(config_name) = cli.config_name() {
-        // Use config file name for log file
-        format!("{}.log", config_name)
+    if let Some(config_name) = cli.config_name() {
+        // Create a subdirectory with the config name
+        // Log path: Log/ConfigName/ConfigName_YYYYMMDD_HHMMSS.log
+        let config_log_dir = log_dir.join(&config_name);
+        let log_filename = format!("{}_{}.log", config_name, timestamp);
+        config_log_dir.join(log_filename)
     } else {
-        // Use timestamp for CLI run
-        let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-        format!("CLIRun_{}.log", timestamp)
-    };
-
-    log_dir.join(log_filename)
+        // Use timestamp for CLI run (no config)
+        // Log path: Log/CLIRun_YYYYMMDD_HHMMSS.log
+        let log_filename = format!("CLIRun_{}.log", timestamp);
+        log_dir.join(log_filename)
+    }
 }
 
 /// Resolve config path - supports shorthand syntax

@@ -6,7 +6,7 @@
 //! - Computing hashes for deduplication
 //! - Organizing files to output directory
 
-use crate::config::{ClassificationRule, Config, FileOperation, MonthFormat, ProcessingMode};
+use crate::config::{ClassificationRule, Config, FileOperation, FileType, MonthFormat, ProcessingMode};
 use crate::error::{Error, Result};
 use crate::hash::{compute_file_hash, compute_metadata_hash};
 use crate::state::{IncrementalWatermark, ProcessingState};
@@ -927,6 +927,7 @@ fn build_base_destination_path(
 
     let mut dest = config.output_dir.clone();
 
+    // Time-based classification
     match config.classification {
         ClassificationRule::None => {
             // Files go directly to output directory
@@ -942,6 +943,27 @@ fn build_base_destination_path(
                 }
                 MonthFormat::Combined => {
                     dest.push(format!("{}-{:02}", timestamp.year(), timestamp.month()));
+                }
+            }
+        }
+    }
+
+    // File type classification (after time classification)
+    if config.classify_by_type {
+        if let Some(ext) = source.extension().and_then(|e| e.to_str()) {
+            if let Some(file_type) = config.get_file_type(ext) {
+                match file_type {
+                    FileType::Photos => {
+                        dest.push(file_type.folder_name());
+                    }
+                    FileType::Raw => {
+                        // RAW files are nested under Photos/Raw
+                        dest.push(FileType::Photos.folder_name());
+                        dest.push(file_type.folder_name());
+                    }
+                    FileType::Videos => {
+                        dest.push(file_type.folder_name());
+                    }
                 }
             }
         }

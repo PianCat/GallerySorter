@@ -53,6 +53,12 @@ pub struct InteractiveWizard {
     exe_dir: PathBuf,
 }
 
+/// Result of interactive wizard with config and optional config name
+pub struct InteractiveResult {
+    pub config: Config,
+    pub config_name: Option<String>,
+}
+
 impl InteractiveWizard {
     pub fn new() -> Self {
         let exe_dir = std::env::current_exe()
@@ -86,7 +92,7 @@ impl InteractiveWizard {
     }
 
     /// Run the interactive main menu
-    pub fn run(&self) -> anyhow::Result<Option<Config>> {
+    pub fn run(&self) -> anyhow::Result<Option<InteractiveResult>> {
         self.show_banner();
 
         println!("\n{}", style(Strings::welcome_message()).green().bold());
@@ -110,14 +116,20 @@ impl InteractiveWizard {
                 0 => {
                     // Run with directly input parameters
                     match self.collect_config_interactive()? {
-                        Some(config) => return Ok(Some(config)),
+                        Some(config) => return Ok(Some(InteractiveResult {
+                            config,
+                            config_name: None,
+                        })),
                         None => continue, // User cancelled, show menu again
                     }
                 }
                 1 => {
                     // Run with selected configuration
                     match self.select_and_load_config()? {
-                        Some(config) => return Ok(Some(config)),
+                        Some((config, config_name)) => return Ok(Some(InteractiveResult {
+                            config,
+                            config_name: Some(config_name),
+                        })),
                         None => continue, // User cancelled or no configs, show menu again
                     }
                 }
@@ -166,7 +178,7 @@ impl InteractiveWizard {
     }
 
     /// Select and load a configuration file
-    fn select_and_load_config(&self) -> anyhow::Result<Option<Config>> {
+    fn select_and_load_config(&self) -> anyhow::Result<Option<(Config, String)>> {
         let config_files = self.list_config_files();
 
         if config_files.is_empty() {
@@ -207,6 +219,11 @@ impl InteractiveWizard {
         }
 
         let selected_path = &config_files[selection];
+        let config_name = selected_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Unknown")
+            .to_string();
 
         // Load the configuration
         println!("\n{} {} {}",
@@ -229,7 +246,7 @@ impl InteractiveWizard {
             return Ok(None);
         }
 
-        Ok(Some(config))
+        Ok(Some((config, config_name)))
     }
 
     /// Create and save a new configuration file
