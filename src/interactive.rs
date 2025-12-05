@@ -478,6 +478,12 @@ impl InteractiveWizard {
             .default(false)
             .interact()?;
 
+        // Classify by file type
+        let classify_by_type = Confirm::new()
+            .with_prompt(Strings::classify_by_file_type())
+            .default(false)
+            .interact()?;
+
         // Build config
         let config = Config {
             input_dirs,
@@ -485,6 +491,7 @@ impl InteractiveWizard {
             processing_mode,
             classification,
             month_format,
+            classify_by_type,
             operation,
             deduplicate,
             dry_run,
@@ -507,6 +514,7 @@ impl InteractiveWizard {
         if config.classification == ClassificationRule::YearMonth {
             println!("  {} {:?}", style(Strings::summary_month_format()).green(), config.month_format);
         }
+        println!("  {} {}", style(Strings::summary_classify_by_type()).green(), config.classify_by_type);
         println!("  {} {:?}", style(Strings::summary_operation()).green(), config.operation);
         println!("  {} {}", style(Strings::summary_deduplicate()).green(), config.deduplicate);
         println!("  {} {}", style(Strings::summary_dry_run()).green(), config.dry_run);

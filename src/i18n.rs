@@ -423,6 +423,13 @@ impl Strings {
         }
     }
 
+    pub fn classify_by_file_type() -> &'static str {
+        match get_language() {
+            Language::English => "Classify by file type (Photos/Videos/Raw)?",
+            Language::ChineseSimplified => "按文件类型分类（Photos/Videos/Raw）？",
+        }
+    }
+
     pub fn proceed_with_settings() -> &'static str {
         match get_language() {
             Language::English => "Proceed with these settings?",
@@ -501,6 +508,13 @@ impl Strings {
         match get_language() {
             Language::English => "Dry Run:",
             Language::ChineseSimplified => "试运行：",
+        }
+    }
+
+    pub fn summary_classify_by_type() -> &'static str {
+        match get_language() {
+            Language::English => "File Type:",
+            Language::ChineseSimplified => "类型分类：",
         }
     }
 
