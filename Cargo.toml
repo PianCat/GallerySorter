@@ -1,6 +1,6 @@
 [package]
 name = "gallery-sorter"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2024"
 authors = ["PianCat"]
 description = "A  CLI tool for photo album organization with intelligent time-based classification"
@@ -33,7 +33,11 @@ tracing-appender = "0.2"
 # Serialization for state persistence
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-toml = "0.8"
+toml = "0.9"
+
+# Internationalization
+rust-i18n = "3.1"
+sys-locale = "0.3"
 
 # Directory traversal
 walkdir = "2.5"
@@ -50,9 +54,9 @@ lazy_static = "1.5"
 filetime = "0.2"
 
 # Terminal UI
-indicatif = "0.17"
-console = "0.15"
-dialoguer = "0.11"
+indicatif = "0.18"
+console = "0.16"
+dialoguer = "0.12"
 
 [profile.release]
 lto = true

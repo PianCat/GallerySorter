@@ -1,0 +1,124 @@
+# Gallery Sorter - English Translations
+
+# Welcome and Menu
+welcome_message = "Welcome to Gallery Sorter Interactive Mode!"
+select_option_prompt = "Please select an option to continue."
+menu_option_run_direct = "[1] Run with directly input parameters"
+menu_option_run_config = "[2] Run with selected configuration"
+menu_option_create_config = "[3] Create configuration"
+menu_option_exit = "[4] Exit program"
+select_option = "Select an option"
+goodbye = "Goodbye!"
+
+# Configuration Selection
+no_configs_found = "No configuration files found in Config directory."
+use_option_3_hint = "Use option 3 to create a configuration first."
+available_configurations = "Available Configurations:"
+select_configuration = "Select a configuration"
+back_to_main_menu = "← Back to main menu"
+loading_configuration = "Loading configuration:"
+proceed_with_config = "Proceed with this configuration?"
+
+# Configuration Creation
+create_new_configuration = "Create New Configuration"
+enter_config_name = "Enter configuration name (without .toml extension)"
+config_name_empty_error = "Configuration name cannot be empty"
+config_name_invalid_chars_error = "Configuration name cannot contain /, \\, or ."
+config_exists_overwrite = "already exists. Overwrite?"
+configuration_cancelled = "Configuration creation cancelled."
+save_configuration = "Save this configuration?"
+config_not_saved = "Configuration not saved."
+config_saved_to = "Configuration saved to:"
+use_option_2_hint = "You can now use option 2 to run with this configuration."
+
+# Configuration Parameters
+configuration_parameters = "Configuration Parameters"
+enter_input_directory = "Enter input directory (or multiple separated by ;)"
+no_input_dirs_specified = "No input directories specified."
+directory_not_exist = "Directory does not exist:"
+enter_output_directory = "Enter output directory"
+enter_exclude_directories = "Enter directories to exclude (folder names or paths, separated by ;, leave empty to skip)"
+
+# Processing Modes
+select_processing_mode = "Select processing mode"
+mode_full = "Full - Process all files, overwrite existing"
+mode_supplement = "Supplement - Skip files that already exist in target"
+mode_incremental = "Incremental - Only process new/modified files"
+
+# Classification Rules
+select_classification_rule = "Select classification rule"
+classify_year_month = "Year-Month - Organize by YYYY/MM/"
+classify_year = "Year - Organize by YYYY/"
+classify_none = "None - All files in root"
+
+# Month Format
+select_month_format = "Select month format"
+month_format_nested = "Nested - YYYY/MM/"
+month_format_combined = "Combined - YYYY-MM/"
+
+# File Operations
+select_file_operation = "Select file operation"
+operation_copy = "Copy - Copy files to destination"
+operation_move = "Move - Move files to destination"
+operation_hardlink = "Hardlink - Create hard links"
+
+# Options
+enable_deduplication = "Enable file deduplication?"
+dry_run_mode = "Dry run mode (preview without making changes)?"
+classify_by_file_type = "Classify by file type (Photos/Videos/Raw)?"
+proceed_with_settings = "Proceed with these settings?"
+operation_cancelled = "Operation cancelled."
+
+# Configuration Summary
+configuration_summary = "Configuration Summary:"
+summary_input = "Input:"
+summary_output = "Output:"
+summary_exclude_dirs = "Exclude:"
+summary_mode = "Mode:"
+summary_classify = "Classify:"
+summary_month_format = "Month Format:"
+summary_operation = "Operation:"
+summary_deduplicate = "Deduplicate:"
+summary_dry_run = "Dry Run:"
+summary_classify_by_type = "File Type:"
+
+# Processing
+starting_processing = "Starting processing..."
+scanning_directories = "Scanning input directories..."
+log_saved_to = "Log saved to:"
+processing_complete = "PROCESSING COMPLETE"
+
+# Statistics
+statistics = "Statistics:"
+stat_total_files = "Total files:"
+stat_processed = "Processed:"
+stat_skipped = "Skipped:"
+stat_duplicates = "Duplicates:"
+stat_failed = "Failed:"
+failed_files = "Failed Files:"
+and_n_more = "... and %{n} more..."
+
+# Dry Run
+dry_run_notice = "DRY RUN - No files were actually modified"
+
+# CLI Mode
+cli_processing_complete = "Processing Complete!"
+cli_detailed_results = "Detailed Results:"
+cli_failed_files = "Failed files:"
+cli_dry_run_notice = "[DRY RUN] No files were actually modified."
+cli_no_input_dirs_error = "No input directories specified. Use -i/--input or specify in config file."
+cli_input_dir_not_exist = "Warning: Input directory does not exist:"
+cli_output_inside_input_error = "Output directory cannot be inside input directory:"
+cli_is_inside = "is inside"
+
+# Status Labels
+status_ok = "[OK]"
+status_skip = "[SKIP]"
+status_dup = "[DUP]"
+status_fail = "[FAIL]"
+status_dry = "[DRY]"
+
+# Other
+already_processed = "(already processed)"
+duplicate_of = "(duplicate of"
+unknown_error = "Unknown error"

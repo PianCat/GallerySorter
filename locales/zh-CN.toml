@@ -1,0 +1,124 @@
+# Gallery Sorter - 简体中文翻译
+
+# Welcome and Menu
+welcome_message = "欢迎使用 Gallery Sorter 交互模式！"
+select_option_prompt = "请选择一个选项以继续。"
+menu_option_run_direct = "[1] 直接输入参数运行"
+menu_option_run_config = "[2] 使用已有配置运行"
+menu_option_create_config = "[3] 创建配置文件"
+menu_option_exit = "[4] 退出程序"
+select_option = "选择选项"
+goodbye = "再见！"
+
+# Configuration Selection
+no_configs_found = "Config 目录中未找到配置文件。"
+use_option_3_hint = "请先使用选项 3 创建配置文件。"
+available_configurations = "可用配置："
+select_configuration = "选择配置"
+back_to_main_menu = "← 返回主菜单"
+loading_configuration = "正在加载配置："
+proceed_with_config = "使用此配置继续？"
+
+# Configuration Creation
+create_new_configuration = "创建新配置"
+enter_config_name = "输入配置名称（不含 .toml 扩展名）"
+config_name_empty_error = "配置名称不能为空"
+config_name_invalid_chars_error = "配置名称不能包含 /、\\ 或 ."
+config_exists_overwrite = "已存在。是否覆盖？"
+configuration_cancelled = "已取消创建配置。"
+save_configuration = "保存此配置？"
+config_not_saved = "配置未保存。"
+config_saved_to = "配置已保存至："
+use_option_2_hint = "您现在可以使用选项 2 来运行此配置。"
+
+# Configuration Parameters
+configuration_parameters = "配置参数"
+enter_input_directory = "输入源目录（多个目录用 ; 分隔）"
+no_input_dirs_specified = "未指定输入目录。"
+directory_not_exist = "目录不存在："
+enter_output_directory = "输入目标目录"
+enter_exclude_directories = "输入要排除的目录（文件夹名或路径，用 ; 分隔，留空跳过）"
+
+# Processing Modes
+select_processing_mode = "选择处理模式"
+mode_full = "完整模式 - 处理所有文件，覆盖已存在的文件"
+mode_supplement = "补充模式 - 跳过目标目录中已存在的文件"
+mode_incremental = "增量模式 - 仅处理新增/修改的文件"
+
+# Classification Rules
+select_classification_rule = "选择分类规则"
+classify_year_month = "年-月 - 按 YYYY/MM/ 整理"
+classify_year = "年份 - 按 YYYY/ 整理"
+classify_none = "无分类 - 所有文件放在根目录"
+
+# Month Format
+select_month_format = "选择月份格式"
+month_format_nested = "嵌套格式 - YYYY/MM/"
+month_format_combined = "组合格式 - YYYY-MM/"
+
+# File Operations
+select_file_operation = "选择文件操作"
+operation_copy = "复制 - 复制文件到目标目录"
+operation_move = "移动 - 移动文件到目标目录"
+operation_hardlink = "硬链接 - 创建硬链接"
+
+# Options
+enable_deduplication = "启用文件去重？"
+dry_run_mode = "试运行模式（预览而不实际修改）？"
+classify_by_file_type = "按文件类型分类（Photos/Videos/Raw）？"
+proceed_with_settings = "使用这些设置继续？"
+operation_cancelled = "操作已取消。"
+
+# Configuration Summary
+configuration_summary = "配置摘要："
+summary_input = "输入："
+summary_output = "输出："
+summary_exclude_dirs = "排除："
+summary_mode = "模式："
+summary_classify = "分类："
+summary_month_format = "月份格式："
+summary_operation = "操作："
+summary_deduplicate = "去重："
+summary_dry_run = "试运行："
+summary_classify_by_type = "类型分类："
+
+# Processing
+starting_processing = "开始处理..."
+scanning_directories = "正在扫描输入目录..."
+log_saved_to = "日志已保存至："
+processing_complete = "处理完成"
+
+# Statistics
+statistics = "统计："
+stat_total_files = "文件总数："
+stat_processed = "已处理："
+stat_skipped = "已跳过："
+stat_duplicates = "重复文件："
+stat_failed = "失败："
+failed_files = "失败文件："
+and_n_more = "... 还有 %{n} 个..."
+
+# Dry Run
+dry_run_notice = "试运行 - 没有实际修改任何文件"
+
+# CLI Mode
+cli_processing_complete = "处理完成！"
+cli_detailed_results = "详细结果："
+cli_failed_files = "失败的文件："
+cli_dry_run_notice = "[试运行] 没有实际修改任何文件。"
+cli_no_input_dirs_error = "未指定输入目录。请使用 -i/--input 参数或在配置文件中指定。"
+cli_input_dir_not_exist = "警告：输入目录不存在："
+cli_output_inside_input_error = "输出目录不能在输入目录内："
+cli_is_inside = "在"
+
+# Status Labels
+status_ok = "[成功]"
+status_skip = "[跳过]"
+status_dup = "[重复]"
+status_fail = "[失败]"
+status_dry = "[试运行]"
+
+# Other
+already_processed = "（已处理）"
+duplicate_of = "（与此重复："
+unknown_error = "未知错误"

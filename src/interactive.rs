@@ -1,8 +1,20 @@
 //! Interactive CLI mode with progress bars and real-time statistics
 
 use crate::config::{ClassificationRule, Config, FileOperation, MonthFormat, ProcessingMode};
-use crate::i18n::Strings;
 use crate::process::{FileResult, ProcessingStats, ProcessingStatus, Processor};
+
+// Initialize i18n for this module
+rust_i18n::i18n!("locales", fallback = "en");
+
+/// Convenience macro for translation
+macro_rules! t {
+    ($key:expr) => {
+        rust_i18n::t!($key)
+    };
+    ($key:expr, $($tt:tt)*) => {
+        rust_i18n::t!($key, $($tt)*)
+    };
+}
 use console::{style, Term};
 use dialoguer::{Confirm, Input, Select};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -83,7 +95,7 @@ impl InteractiveWizard {
 ║  ██║   ██║██╔══██║██║     ██║     ██╔══╝  ██╔══██╗  ╚██╔╝     ║
 ║  ╚██████╔╝██║  ██║███████╗███████╗███████╗██║  ██║   ██║      ║
 ║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝╚═╝  ╚═╝   ╚═╝      ║
-║                        SORTER v0.1.0                          ║
+║                            SORTER                             ║
 ║                                                               ║
 ║                  Photo & Video Organization                   ║
 ╚═══════════════════════════════════════════════════════════════╝
@@ -95,19 +107,19 @@ impl InteractiveWizard {
     pub fn run(&self) -> anyhow::Result<Option<InteractiveResult>> {
         self.show_banner();
 
-        println!("\n{}", style(Strings::welcome_message()).green().bold());
-        println!("{}\n", style(Strings::select_option_prompt()).dim());
+        println!("\n{}", style(t!("welcome_message").to_string()).green().bold());
+        println!("{}\n", style(t!("select_option_prompt").to_string()).dim());
 
         loop {
             let menu_options = vec![
-                Strings::menu_option_run_direct(),
-                Strings::menu_option_run_config(),
-                Strings::menu_option_create_config(),
-                Strings::menu_option_exit(),
+                t!("menu_option_run_direct").to_string(),
+                t!("menu_option_run_config").to_string(),
+                t!("menu_option_create_config").to_string(),
+                t!("menu_option_exit").to_string(),
             ];
 
             let selection = Select::new()
-                .with_prompt(Strings::select_option())
+                .with_prompt(t!("select_option").to_string())
                 .items(&menu_options)
                 .default(0)
                 .interact()?;
@@ -141,7 +153,7 @@ impl InteractiveWizard {
                 }
                 3 => {
                     // Exit program
-                    println!("{}", style(Strings::goodbye()).yellow());
+                    println!("{}", style(t!("goodbye").to_string()).yellow());
                     return Ok(None);
                 }
                 _ => continue,
@@ -184,11 +196,11 @@ impl InteractiveWizard {
         if config_files.is_empty() {
             println!("\n{} {}",
                 style("!").yellow(),
-                Strings::no_configs_found()
+                t!("no_configs_found")
             );
             println!("  {} {}\n",
                 style("→").dim(),
-                Strings::use_option_3_hint()
+                t!("use_option_3_hint")
             );
             return Ok(None);
         }
@@ -203,12 +215,12 @@ impl InteractiveWizard {
                     .to_string()
             })
             .collect();
-        display_names.push(Strings::back_to_main_menu().to_string());
+        display_names.push(t!("back_to_main_menu").to_string());
 
-        println!("\n{} {}\n", style(">").cyan(), Strings::available_configurations());
+        println!("\n{} {}\n", style(">").cyan(), t!("available_configurations"));
 
         let selection = Select::new()
-            .with_prompt(Strings::select_configuration())
+            .with_prompt(t!("select_configuration").to_string())
             .items(&display_names)
             .default(0)
             .interact()?;
@@ -228,7 +240,7 @@ impl InteractiveWizard {
         // Load the configuration
         println!("\n{} {} {}",
             style("📄").cyan(),
-            Strings::loading_configuration(),
+            t!("loading_configuration"),
             style(selected_path.display()).green()
         );
 
@@ -239,7 +251,7 @@ impl InteractiveWizard {
 
         // Confirm to proceed
         if !Confirm::new()
-            .with_prompt(Strings::proceed_with_config())
+            .with_prompt(t!("proceed_with_config").to_string())
             .default(true)
             .interact()?
         {
@@ -252,17 +264,17 @@ impl InteractiveWizard {
     /// Create and save a new configuration file
     fn create_and_save_config(&self) -> anyhow::Result<()> {
         println!("\n{}", style("━".repeat(60)).dim());
-        println!("{}", style(Strings::create_new_configuration()).cyan().bold());
+        println!("{}", style(t!("create_new_configuration").to_string()).cyan().bold());
         println!("{}\n", style("━".repeat(60)).dim());
 
         // Get configuration name
         let config_name: String = Input::new()
-            .with_prompt(Strings::enter_config_name())
-            .validate_with(|input: &String| -> Result<(), &str> {
+            .with_prompt(t!("enter_config_name").to_string())
+            .validate_with(|input: &String| -> Result<(), String> {
                 if input.trim().is_empty() {
-                    Err(Strings::config_name_empty_error())
+                    Err(t!("config_name_empty_error").to_string())
                 } else if input.contains('/') || input.contains('\\') || input.contains('.') {
-                    Err(Strings::config_name_invalid_chars_error())
+                    Err(t!("config_name_invalid_chars_error").to_string())
                 } else {
                     Ok(())
                 }
@@ -278,12 +290,12 @@ impl InteractiveWizard {
                 .with_prompt(format!(
                     "'{}' {}",
                     config_name,
-                    Strings::config_exists_overwrite()
+                    t!("config_exists_overwrite")
                 ))
                 .default(false)
                 .interact()?
             {
-                println!("{}", style(Strings::configuration_cancelled()).yellow());
+                println!("{}", style(t!("configuration_cancelled").to_string()).yellow());
                 return Ok(());
             }
         }
@@ -292,7 +304,7 @@ impl InteractiveWizard {
         let config = match self.collect_config_params()? {
             Some(config) => config,
             None => {
-                println!("{}", style(Strings::configuration_cancelled()).yellow());
+                println!("{}", style(t!("configuration_cancelled").to_string()).yellow());
                 return Ok(());
             }
         };
@@ -302,11 +314,11 @@ impl InteractiveWizard {
 
         // Confirm to save
         if !Confirm::new()
-            .with_prompt(Strings::save_configuration())
+            .with_prompt(t!("save_configuration").to_string())
             .default(true)
             .interact()?
         {
-            println!("{}", style(Strings::config_not_saved()).yellow());
+            println!("{}", style(t!("config_not_saved").to_string()).yellow());
             return Ok(());
         }
 
@@ -315,12 +327,12 @@ impl InteractiveWizard {
 
         println!("\n{} {} {}",
             style("✓").green(),
-            Strings::config_saved_to(),
+            t!("config_saved_to"),
             style(config_path.display()).green()
         );
         println!("  {} {}\n",
             style("→").dim(),
-            Strings::use_option_2_hint()
+            t!("use_option_2_hint")
         );
 
         Ok(())
@@ -338,11 +350,11 @@ impl InteractiveWizard {
 
         // Confirm to proceed
         if !Confirm::new()
-            .with_prompt(Strings::proceed_with_settings())
+            .with_prompt(t!("proceed_with_settings").to_string())
             .default(true)
             .interact()?
         {
-            println!("{}", style(Strings::operation_cancelled()).yellow());
+            println!("{}", style(t!("operation_cancelled").to_string()).yellow());
             return Ok(None);
         }
 
@@ -352,12 +364,12 @@ impl InteractiveWizard {
     /// Collect configuration parameters from user input
     fn collect_config_params(&self) -> anyhow::Result<Option<Config>> {
         println!("\n{}", style("━".repeat(60)).dim());
-        println!("{}", style(Strings::configuration_parameters()).cyan().bold());
+        println!("{}", style(t!("configuration_parameters").to_string()).cyan().bold());
         println!("{}\n", style("━".repeat(60)).dim());
 
         // Get input directories
         let input_str: String = Input::new()
-            .with_prompt(Strings::enter_input_directory())
+            .with_prompt(t!("enter_input_directory").to_string())
             .interact_text()?;
 
         let input_dirs: Vec<PathBuf> = input_str
@@ -367,7 +379,7 @@ impl InteractiveWizard {
             .collect();
 
         if input_dirs.is_empty() {
-            println!("{} {}", style("!").yellow(), Strings::no_input_dirs_specified());
+            println!("{} {}", style("!").yellow(), t!("no_input_dirs_specified"));
             return Ok(None);
         }
 
@@ -376,7 +388,7 @@ impl InteractiveWizard {
             if !dir.exists() {
                 println!("{} {} {}",
                     style("!").yellow(),
-                    Strings::directory_not_exist(),
+                    t!("directory_not_exist"),
                     style(dir.display()).red()
                 );
             }
@@ -384,13 +396,13 @@ impl InteractiveWizard {
 
         // Get output directory
         let output_dir: String = Input::new()
-            .with_prompt(Strings::enter_output_directory())
+            .with_prompt(t!("enter_output_directory").to_string())
             .default("output".to_string())
             .interact_text()?;
 
         // Get exclude directories
         let exclude_str: String = Input::new()
-            .with_prompt(Strings::enter_exclude_directories())
+            .with_prompt(t!("enter_exclude_directories").to_string())
             .allow_empty(true)
             .interact_text()?;
 
@@ -402,12 +414,12 @@ impl InteractiveWizard {
 
         // Select processing mode
         let mode_options = vec![
-            Strings::mode_full(),
-            Strings::mode_supplement(),
-            Strings::mode_incremental(),
+            t!("mode_full").to_string(),
+            t!("mode_supplement").to_string(),
+            t!("mode_incremental").to_string(),
         ];
         let mode_idx = Select::new()
-            .with_prompt(Strings::select_processing_mode())
+            .with_prompt(t!("select_processing_mode").to_string())
             .items(&mode_options)
             .default(0)
             .interact()?;
@@ -421,12 +433,12 @@ impl InteractiveWizard {
 
         // Select classification rule
         let classify_options = vec![
-            Strings::classify_year_month(),
-            Strings::classify_year(),
-            Strings::classify_none(),
+            t!("classify_year_month").to_string(),
+            t!("classify_year").to_string(),
+            t!("classify_none").to_string(),
         ];
         let classify_idx = Select::new()
-            .with_prompt(Strings::select_classification_rule())
+            .with_prompt(t!("select_classification_rule").to_string())
             .items(&classify_options)
             .default(0)
             .interact()?;
@@ -441,11 +453,11 @@ impl InteractiveWizard {
         // Select month format if year-month classification
         let month_format = if classification == ClassificationRule::YearMonth {
             let format_options = vec![
-                Strings::month_format_nested(),
-                Strings::month_format_combined(),
+                t!("month_format_nested").to_string(),
+                t!("month_format_combined").to_string(),
             ];
             let format_idx = Select::new()
-                .with_prompt(Strings::select_month_format())
+                .with_prompt(t!("select_month_format").to_string())
                 .items(&format_options)
                 .default(0)
                 .interact()?;
@@ -461,12 +473,12 @@ impl InteractiveWizard {
 
         // Select file operation
         let operation_options = vec![
-            Strings::operation_copy(),
-            Strings::operation_move(),
-            Strings::operation_hardlink(),
+            t!("operation_copy").to_string(),
+            t!("operation_move").to_string(),
+            t!("operation_hardlink").to_string(),
         ];
         let operation_idx = Select::new()
-            .with_prompt(Strings::select_file_operation())
+            .with_prompt(t!("select_file_operation").to_string())
             .items(&operation_options)
             .default(0)
             .interact()?;
@@ -480,19 +492,19 @@ impl InteractiveWizard {
 
         // Deduplication
         let deduplicate = Confirm::new()
-            .with_prompt(Strings::enable_deduplication())
+            .with_prompt(t!("enable_deduplication").to_string())
             .default(true)
             .interact()?;
 
         // Dry run
         let dry_run = Confirm::new()
-            .with_prompt(Strings::dry_run_mode())
+            .with_prompt(t!("dry_run_mode").to_string())
             .default(false)
             .interact()?;
 
         // Classify by file type
         let classify_by_type = Confirm::new()
-            .with_prompt(Strings::classify_by_file_type())
+            .with_prompt(t!("classify_by_file_type").to_string())
             .default(false)
             .interact()?;
 
@@ -518,22 +530,22 @@ impl InteractiveWizard {
     /// Display configuration summary
     fn show_config_summary(&self, config: &Config) {
         println!("\n{}", style("━".repeat(60)).dim());
-        println!("{}", style(Strings::configuration_summary()).cyan().bold());
+        println!("{}", style(t!("configuration_summary").to_string()).cyan().bold());
         println!("{}", style("━".repeat(60)).dim());
-        println!("  {} {:?}", style(Strings::summary_input()).green(), config.input_dirs);
-        println!("  {} {}", style(Strings::summary_output()).green(), config.output_dir.display());
+        println!("  {} {:?}", style(t!("summary_input").to_string()).green(), config.input_dirs);
+        println!("  {} {}", style(t!("summary_output").to_string()).green(), config.output_dir.display());
         if !config.exclude_dirs.is_empty() {
-            println!("  {} {:?}", style(Strings::summary_exclude_dirs()).green(), config.exclude_dirs);
+            println!("  {} {:?}", style(t!("summary_exclude_dirs").to_string()).green(), config.exclude_dirs);
         }
-        println!("  {} {:?}", style(Strings::summary_mode()).green(), config.processing_mode);
-        println!("  {} {:?}", style(Strings::summary_classify()).green(), config.classification);
+        println!("  {} {:?}", style(t!("summary_mode").to_string()).green(), config.processing_mode);
+        println!("  {} {:?}", style(t!("summary_classify").to_string()).green(), config.classification);
         if config.classification == ClassificationRule::YearMonth {
-            println!("  {} {:?}", style(Strings::summary_month_format()).green(), config.month_format);
+            println!("  {} {:?}", style(t!("summary_month_format").to_string()).green(), config.month_format);
         }
-        println!("  {} {}", style(Strings::summary_classify_by_type()).green(), config.classify_by_type);
-        println!("  {} {:?}", style(Strings::summary_operation()).green(), config.operation);
-        println!("  {} {}", style(Strings::summary_deduplicate()).green(), config.deduplicate);
-        println!("  {} {}", style(Strings::summary_dry_run()).green(), config.dry_run);
+        println!("  {} {}", style(t!("summary_classify_by_type").to_string()).green(), config.classify_by_type);
+        println!("  {} {:?}", style(t!("summary_operation").to_string()).green(), config.operation);
+        println!("  {} {}", style(t!("summary_deduplicate").to_string()).green(), config.deduplicate);
+        println!("  {} {}", style(t!("summary_dry_run").to_string()).green(), config.dry_run);
         println!("{}\n", style("━".repeat(60)).dim());
     }
 }
@@ -671,7 +683,7 @@ pub fn run_with_progress(
     let mut processor = Processor::new(config)?;
 
     // Show scanning message
-    println!("\n{} {}", style(">").cyan(), Strings::scanning_directories());
+    println!("\n{} {}", style(">").cyan(), t!("scanning_directories"));
 
     // Get results with progress
     let results = processor.run()?;
@@ -686,7 +698,7 @@ pub fn display_summary(stats: &ProcessingStats, results: &[FileResult], dry_run:
     let _ = term.clear_last_lines(0);
 
     println!("\n{}", style("═".repeat(60)).cyan());
-    println!("{:^60}", style(Strings::processing_complete()).cyan().bold());
+    println!("{:^60}", style(t!("processing_complete").to_string()).cyan().bold());
     println!("{}", style("═".repeat(60)).cyan());
 
     let total = stats.total_files.load(Ordering::Relaxed);
@@ -697,14 +709,14 @@ pub fn display_summary(stats: &ProcessingStats, results: &[FileResult], dry_run:
 
     println!("\n  {} {}",
         style("#").cyan(),
-        style(Strings::statistics()).bold()
+        style(t!("statistics").to_string()).bold()
     );
     println!("  {}", style("─".repeat(40)).dim());
-    println!("    {} {}     {}", style(">").dim(), Strings::stat_total_files(), style(total).bold());
-    println!("    {} {}       {}", style("✓").green(), Strings::stat_processed(), style(processed).green().bold());
-    println!("    {} {}         {}", style("○").cyan(), Strings::stat_skipped(), style(skipped).cyan().bold());
-    println!("    {} {}      {}", style("◎").yellow(), Strings::stat_duplicates(), style(duplicates).yellow().bold());
-    println!("    {} {}          {}", style("✗").red(), Strings::stat_failed(), style(failed).red().bold());
+    println!("    {} {}     {}", style(">").dim(), t!("stat_total_files"), style(total).bold());
+    println!("    {} {}       {}", style("✓").green(), t!("stat_processed"), style(processed).green().bold());
+    println!("    {} {}         {}", style("○").cyan(), t!("stat_skipped"), style(skipped).cyan().bold());
+    println!("    {} {}      {}", style("◎").yellow(), t!("stat_duplicates"), style(duplicates).yellow().bold());
+    println!("    {} {}          {}", style("✗").red(), t!("stat_failed"), style(failed).red().bold());
 
     // Show failed files if any
     let failed_files: Vec<_> = results.iter()
@@ -714,23 +726,23 @@ pub fn display_summary(stats: &ProcessingStats, results: &[FileResult], dry_run:
     if !failed_files.is_empty() {
         println!("\n  {} {}",
             style("!").yellow(),
-            style(Strings::failed_files()).yellow().bold()
+            style(t!("failed_files").to_string()).yellow().bold()
         );
         println!("  {}", style("─".repeat(40)).dim());
         for (i, result) in failed_files.iter().take(5).enumerate() {
             println!("    {}. {} - {}",
                 i + 1,
                 style(result.source.file_name().unwrap_or_default().to_string_lossy()).red(),
-                style(result.error.as_deref().unwrap_or(Strings::unknown_error())).dim()
+                style(result.error.as_deref().unwrap_or(&t!("unknown_error"))).dim()
             );
         }
         if failed_files.len() > 5 {
-            println!("    {}", style(Strings::and_n_more(failed_files.len() - 5)).dim());
+            println!("    {}", style(t!("and_n_more", n = failed_files.len() - 5).to_string()).dim());
         }
     }
 
     if dry_run {
-        println!("\n  {}", style(format!("* {}", Strings::dry_run_notice())).yellow().bold());
+        println!("\n  {}", style(format!("* {}", t!("dry_run_notice"))).yellow().bold());
     }
 
     println!("\n{}", style("═".repeat(60)).cyan());

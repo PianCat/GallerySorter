@@ -9,15 +9,30 @@ use chrono::Local;
 use clap::Parser;
 use console::style;
 use gallery_sorter::{
-    display_summary, should_run_interactive, Cli, Config, InteractiveResult, InteractiveWizard, Processor,
+    display_summary, init_locale, should_run_interactive, Cli, Config, InteractiveResult, InteractiveWizard, Processor,
 };
-use gallery_sorter::i18n::Strings;
 use std::path::PathBuf;
 use tracing::{error, info, Level};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
+// Initialize i18n for this binary
+rust_i18n::i18n!("locales", fallback = "en");
+
+/// Convenience macro for translation
+macro_rules! t {
+    ($key:expr) => {
+        rust_i18n::t!($key)
+    };
+    ($key:expr, $($tt:tt)*) => {
+        rust_i18n::t!($key, $($tt)*)
+    };
+}
+
 fn main() -> Result<()> {
+    // Initialize locale based on system settings
+    init_locale();
+
     // Check if we should run in interactive mode
     if should_run_interactive() {
         return run_interactive_mode();
@@ -72,7 +87,7 @@ fn run_interactive_mode() -> Result<()> {
     let mut processor = Processor::new(config)?;
 
     // Run with progress display
-    println!("\n{} {}\n", style("*").cyan(), Strings::starting_processing());
+    println!("\n{} {}\n", style("*").cyan(), t!("starting_processing"));
 
     match processor.run() {
         Ok(results) => {
@@ -84,7 +99,7 @@ fn run_interactive_mode() -> Result<()> {
             info!(log_file = %log_path.display(), "Processing complete");
             println!("\n  {} {} {}\n",
                 style(">").dim(),
-                Strings::log_saved_to(),
+                t!("log_saved_to"),
                 style(log_path.display()).dim()
             );
 
@@ -138,47 +153,47 @@ fn run_cli_mode() -> Result<()> {
         Ok(results) => {
             // Print summary
             println!("\n{}", "=".repeat(60));
-            println!("{}", Strings::cli_processing_complete());
+            println!("{}", t!("cli_processing_complete"));
             println!("{}", "=".repeat(60));
             println!("{}", processor.stats().summary());
 
             // Print detailed results if verbose
             if cli.verbose {
-                println!("\n{}:", Strings::cli_detailed_results());
+                println!("\n{}:", t!("cli_detailed_results"));
                 for result in &results {
                     match result.status {
                         gallery_sorter::process::ProcessingStatus::Success => {
                             println!(
                                 "  {} {} -> {}",
-                                Strings::status_ok(),
+                                t!("status_ok"),
                                 result.source.display(),
                                 result.destination.as_ref().map(|p| p.display().to_string()).unwrap_or_default()
                             );
                         }
                         gallery_sorter::process::ProcessingStatus::Skipped => {
-                            println!("  {} {} {}", Strings::status_skip(), result.source.display(), Strings::already_processed());
+                            println!("  {} {} {}", t!("status_skip"), result.source.display(), t!("already_processed"));
                         }
                         gallery_sorter::process::ProcessingStatus::Duplicate => {
                             println!(
                                 "  {} {} {} {})",
-                                Strings::status_dup(),
+                                t!("status_dup"),
                                 result.source.display(),
-                                Strings::duplicate_of(),
+                                t!("duplicate_of"),
                                 result.destination.as_ref().map(|p| p.display().to_string()).unwrap_or_default()
                             );
                         }
                         gallery_sorter::process::ProcessingStatus::Failed => {
                             println!(
                                 "  {} {} - {}",
-                                Strings::status_fail(),
+                                t!("status_fail"),
                                 result.source.display(),
-                                result.error.as_deref().unwrap_or(Strings::unknown_error())
+                                result.error.as_deref().unwrap_or(&t!("unknown_error"))
                             );
                         }
                         gallery_sorter::process::ProcessingStatus::DryRun => {
                             println!(
                                 "  {} {} -> {}",
-                                Strings::status_dry(),
+                                t!("status_dry"),
                                 result.source.display(),
                                 result.destination.as_ref().map(|p| p.display().to_string()).unwrap_or_default()
                             );
@@ -194,22 +209,22 @@ fn run_cli_mode() -> Result<()> {
                 .collect();
 
             if !failed.is_empty() {
-                eprintln!("\n{}:", Strings::cli_failed_files());
+                eprintln!("\n{}:", t!("cli_failed_files"));
                 for result in &failed {
                     eprintln!(
                         "  {} - {}",
                         result.source.display(),
-                        result.error.as_deref().unwrap_or(Strings::unknown_error())
+                        result.error.as_deref().unwrap_or(&t!("unknown_error"))
                     );
                 }
             }
 
             if cli.dry_run {
-                println!("\n{}", Strings::cli_dry_run_notice());
+                println!("\n{}", t!("cli_dry_run_notice"));
             }
 
             info!(log_file = %log_path.display(), "Processing complete. Log saved to");
-            println!("\n{} {}", Strings::log_saved_to(), log_path.display());
+            println!("\n{} {}", t!("log_saved_to"), log_path.display());
 
             Ok(())
         }
@@ -305,7 +320,7 @@ fn load_config(cli: &Cli, exe_dir: &PathBuf) -> Result<Config> {
 
     // Validate that we have input directories
     if config.input_dirs.is_empty() {
-        anyhow::bail!(Strings::cli_no_input_dirs_error());
+        anyhow::bail!("{}", t!("cli_no_input_dirs_error"));
     }
 
     Ok(config)
@@ -387,7 +402,7 @@ fn validate_config(config: &gallery_sorter::Config) -> Result<()> {
     // Check input directories exist
     for input_dir in &config.input_dirs {
         if !input_dir.exists() {
-            eprintln!("{} {}", Strings::cli_input_dir_not_exist(), input_dir.display());
+            eprintln!("{} {}", t!("cli_input_dir_not_exist"), input_dir.display());
         }
     }
 
@@ -396,9 +411,9 @@ fn validate_config(config: &gallery_sorter::Config) -> Result<()> {
         if config.output_dir.starts_with(input_dir) {
             anyhow::bail!(
                 "{} {} {} {}",
-                Strings::cli_output_inside_input_error(),
+                t!("cli_output_inside_input_error"),
                 config.output_dir.display(),
-                Strings::cli_is_inside(),
+                t!("cli_is_inside"),
                 input_dir.display()
             );
         }
