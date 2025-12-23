@@ -72,7 +72,7 @@ fn run_interactive_mode() -> Result<()> {
     let mut processor = Processor::new(config)?;
 
     // Run with progress display
-    println!("\n{} {}\n", style("🚀").cyan(), Strings::starting_processing());
+    println!("\n{} {}\n", style("*").cyan(), Strings::starting_processing());
 
     match processor.run() {
         Ok(results) => {
@@ -83,7 +83,7 @@ fn run_interactive_mode() -> Result<()> {
 
             info!(log_file = %log_path.display(), "Processing complete");
             println!("\n  {} {} {}\n",
-                style("📝").dim(),
+                style(">").dim(),
                 Strings::log_saved_to(),
                 style(log_path.display()).dim()
             );

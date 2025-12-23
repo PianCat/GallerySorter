@@ -90,6 +90,10 @@ pub struct Config {
     /// Output directory for organized files
     pub output_dir: PathBuf,
 
+    /// Directories to exclude from scanning (can be absolute paths or folder names)
+    #[serde(default)]
+    pub exclude_dirs: Vec<PathBuf>,
+
     /// Processing mode
     pub processing_mode: ProcessingMode,
 
@@ -139,6 +143,7 @@ impl Default for Config {
         Self {
             input_dirs: vec![],
             output_dir: PathBuf::from("output"),
+            exclude_dirs: vec![],
             processing_mode: ProcessingMode::default(),
             classification: ClassificationRule::default(),
             month_format: MonthFormat::default(),
@@ -151,48 +156,18 @@ impl Default for Config {
             dry_run: false,
             verbose: false,
             image_extensions: vec![
-                // JPEG - most common, full EXIF support
-                "jpg".into(),
-                "jpeg".into(),
-                // PNG - EXIF support via kamadak-exif
-                "png".into(),
-                // GIF - basic image format
-                "gif".into(),
-                // BMP - basic image format
-                "bmp".into(),
-                // WebP - EXIF support via kamadak-exif
-                "webp".into(),
-                // HEIC/HEIF - Apple's image format, EXIF support via kamadak-exif
-                "heic".into(),
-                "heif".into(),
-                // AVIF - modern format, EXIF support via kamadak-exif
-                "avif".into(),
-                // TIFF - full EXIF support
-                "tiff".into(),
-                "tif".into(),
+                "jpg".into(), "jpeg".into(), "png".into(), "gif".into(),
+                "bmp".into(), "webp".into(), "heic".into(), "heif".into(),
+                "avif".into(), "tiff".into(), "tif".into(),
             ],
             video_extensions: vec![
-                "mp4".into(),
-                "mov".into(),
-                "avi".into(),
-                "mkv".into(),
-                "wmv".into(),
-                "flv".into(),
-                "m4v".into(),
-                "3gp".into(),
+                "mp4".into(), "mov".into(), "avi".into(), "mkv".into(),
+                "wmv".into(), "flv".into(), "m4v".into(), "3gp".into(),
             ],
             raw_extensions: vec![
-                "raw".into(),
-                "arw".into(),
-                "cr2".into(),
-                "cr3".into(),
-                "nef".into(),
-                "orf".into(),
-                "rw2".into(),
-                "dng".into(),
-                "raf".into(),
-                "srw".into(),
-                "pef".into(),
+                "raw".into(), "arw".into(), "cr2".into(), "cr3".into(),
+                "nef".into(), "orf".into(), "rw2".into(), "dng".into(),
+                "raf".into(), "srw".into(), "pef".into(),
             ],
         }
     }
@@ -316,6 +291,17 @@ input_dirs = [
 
 # Output directory for organized files
 output_dir = "D:/Sorted"
+
+# Directories to exclude from scanning
+# Can be absolute paths or folder names (will match any folder with that name)
+# Examples:
+#   - ".sync" - excludes any folder named ".sync"
+#   - "D:/Photos/.thumbnails" - excludes this specific folder
+exclude_dirs = [
+    ".sync",
+    ".thumbnails",
+    "@eaDir",
+]
 
 # Processing mode: "full", "supplement", or "incremental"
 # - full: Process all files, overwrite existing files in target

@@ -483,6 +483,7 @@ impl Processor {
             for entry in WalkDir::new(input_dir)
                 .follow_links(true)
                 .into_iter()
+                .filter_entry(|e| !self.is_excluded_dir(e.path()))
                 .filter_map(|e| e.ok())
             {
                 let path = entry.path();
@@ -506,6 +507,37 @@ impl Processor {
         );
 
         Ok(files)
+    }
+
+    /// Check if a path should be excluded based on exclude_dirs configuration
+    fn is_excluded_dir(&self, path: &Path) -> bool {
+        if self.config.exclude_dirs.is_empty() {
+            return false;
+        }
+
+        for exclude in &self.config.exclude_dirs {
+            // Check if it's an absolute path match
+            if exclude.is_absolute() {
+                if path.starts_with(exclude) {
+                    debug!(?path, ?exclude, "Excluding directory (absolute path match)");
+                    return true;
+                }
+            } else {
+                // Check if any component of the path matches the exclude pattern
+                if let Some(exclude_name) = exclude.file_name() {
+                    for component in path.components() {
+                        if let std::path::Component::Normal(name) = component {
+                            if name == exclude_name {
+                                debug!(?path, ?exclude, "Excluding directory (folder name match)");
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        false
     }
 
     /// Scan target directory for existing file hashes (for Supplement mode)

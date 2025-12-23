@@ -74,10 +74,6 @@ fn detect_windows_language() -> Option<Language> {
 pub struct Strings;
 
 impl Strings {
-    // ============================================================
-    // Main Banner and Welcome
-    // ============================================================
-
     pub fn welcome_message() -> &'static str {
         match get_language() {
             Language::English => "Welcome to Gallery Sorter Interactive Mode!",
@@ -92,35 +88,31 @@ impl Strings {
         }
     }
 
-    // ============================================================
-    // Main Menu Options
-    // ============================================================
-
     pub fn menu_option_run_direct() -> &'static str {
         match get_language() {
-            Language::English => "1. Run with directly input parameters",
-            Language::ChineseSimplified => "1. 直接输入参数运行",
+            Language::English => "[1] Run with directly input parameters",
+            Language::ChineseSimplified => "[1] 直接输入参数运行",
         }
     }
 
     pub fn menu_option_run_config() -> &'static str {
         match get_language() {
-            Language::English => "2. Run with selected configuration",
-            Language::ChineseSimplified => "2. 使用已有配置运行",
+            Language::English => "[2] Run with selected configuration",
+            Language::ChineseSimplified => "[2] 使用已有配置运行",
         }
     }
 
     pub fn menu_option_create_config() -> &'static str {
         match get_language() {
-            Language::English => "3. Create configuration",
-            Language::ChineseSimplified => "3. 创建配置文件",
+            Language::English => "[3] Create configuration",
+            Language::ChineseSimplified => "[3] 创建配置文件",
         }
     }
 
     pub fn menu_option_exit() -> &'static str {
         match get_language() {
-            Language::English => "4. Exit program",
-            Language::ChineseSimplified => "4. 退出程序",
+            Language::English => "[4] Exit program",
+            Language::ChineseSimplified => "[4] 退出程序",
         }
     }
 
@@ -137,10 +129,6 @@ impl Strings {
             Language::ChineseSimplified => "再见！",
         }
     }
-
-    // ============================================================
-    // Configuration Selection
-    // ============================================================
 
     pub fn no_configs_found() -> &'static str {
         match get_language() {
@@ -190,10 +178,6 @@ impl Strings {
             Language::ChineseSimplified => "使用此配置继续？",
         }
     }
-
-    // ============================================================
-    // Configuration Creation
-    // ============================================================
 
     pub fn create_new_configuration() -> &'static str {
         match get_language() {
@@ -265,10 +249,6 @@ impl Strings {
         }
     }
 
-    // ============================================================
-    // Configuration Parameters
-    // ============================================================
-
     pub fn configuration_parameters() -> &'static str {
         match get_language() {
             Language::English => "Configuration Parameters",
@@ -301,6 +281,20 @@ impl Strings {
         match get_language() {
             Language::English => "Enter output directory",
             Language::ChineseSimplified => "输入目标目录",
+        }
+    }
+
+    pub fn enter_exclude_directories() -> &'static str {
+        match get_language() {
+            Language::English => "Enter directories to exclude (folder names or paths, separated by ;, leave empty to skip)",
+            Language::ChineseSimplified => "输入要排除的目录（文件夹名或路径，用 ; 分隔，留空跳过）",
+        }
+    }
+
+    pub fn summary_exclude_dirs() -> &'static str {
+        match get_language() {
+            Language::English => "Exclude:",
+            Language::ChineseSimplified => "排除：",
         }
     }
 
@@ -444,10 +438,6 @@ impl Strings {
         }
     }
 
-    // ============================================================
-    // Configuration Summary
-    // ============================================================
-
     pub fn configuration_summary() -> &'static str {
         match get_language() {
             Language::English => "Configuration Summary:",
@@ -518,10 +508,6 @@ impl Strings {
         }
     }
 
-    // ============================================================
-    // Processing Messages
-    // ============================================================
-
     pub fn starting_processing() -> &'static str {
         match get_language() {
             Language::English => "Starting processing...",
@@ -542,10 +528,6 @@ impl Strings {
             Language::ChineseSimplified => "日志已保存至：",
         }
     }
-
-    // ============================================================
-    // Results Summary
-    // ============================================================
 
     pub fn processing_complete() -> &'static str {
         match get_language() {
@@ -617,10 +599,6 @@ impl Strings {
         }
     }
 
-    // ============================================================
-    // CLI Mode Messages
-    // ============================================================
-
     pub fn cli_processing_complete() -> &'static str {
         match get_language() {
             Language::English => "Processing Complete!",
@@ -676,10 +654,6 @@ impl Strings {
             Language::ChineseSimplified => "在",
         }
     }
-
-    // ============================================================
-    // Status Labels (for verbose output)
-    // ============================================================
 
     pub fn status_ok() -> &'static str {
         match get_language() {

@@ -183,7 +183,7 @@ impl InteractiveWizard {
 
         if config_files.is_empty() {
             println!("\n{} {}",
-                style("⚠").yellow(),
+                style("!").yellow(),
                 Strings::no_configs_found()
             );
             println!("  {} {}\n",
@@ -205,7 +205,7 @@ impl InteractiveWizard {
             .collect();
         display_names.push(Strings::back_to_main_menu().to_string());
 
-        println!("\n{} {}\n", style("📁").cyan(), Strings::available_configurations());
+        println!("\n{} {}\n", style(">").cyan(), Strings::available_configurations());
 
         let selection = Select::new()
             .with_prompt(Strings::select_configuration())
@@ -367,7 +367,7 @@ impl InteractiveWizard {
             .collect();
 
         if input_dirs.is_empty() {
-            println!("{} {}", style("⚠").yellow(), Strings::no_input_dirs_specified());
+            println!("{} {}", style("!").yellow(), Strings::no_input_dirs_specified());
             return Ok(None);
         }
 
@@ -375,7 +375,7 @@ impl InteractiveWizard {
         for dir in &input_dirs {
             if !dir.exists() {
                 println!("{} {} {}",
-                    style("⚠").yellow(),
+                    style("!").yellow(),
                     Strings::directory_not_exist(),
                     style(dir.display()).red()
                 );
@@ -387,6 +387,18 @@ impl InteractiveWizard {
             .with_prompt(Strings::enter_output_directory())
             .default("output".to_string())
             .interact_text()?;
+
+        // Get exclude directories
+        let exclude_str: String = Input::new()
+            .with_prompt(Strings::enter_exclude_directories())
+            .allow_empty(true)
+            .interact_text()?;
+
+        let exclude_dirs: Vec<PathBuf> = exclude_str
+            .split(';')
+            .map(|s| PathBuf::from(s.trim()))
+            .filter(|p| !p.as_os_str().is_empty())
+            .collect();
 
         // Select processing mode
         let mode_options = vec![
@@ -488,6 +500,7 @@ impl InteractiveWizard {
         let config = Config {
             input_dirs,
             output_dir: PathBuf::from(output_dir),
+            exclude_dirs,
             processing_mode,
             classification,
             month_format,
@@ -509,6 +522,9 @@ impl InteractiveWizard {
         println!("{}", style("━".repeat(60)).dim());
         println!("  {} {:?}", style(Strings::summary_input()).green(), config.input_dirs);
         println!("  {} {}", style(Strings::summary_output()).green(), config.output_dir.display());
+        if !config.exclude_dirs.is_empty() {
+            println!("  {} {:?}", style(Strings::summary_exclude_dirs()).green(), config.exclude_dirs);
+        }
         println!("  {} {:?}", style(Strings::summary_mode()).green(), config.processing_mode);
         println!("  {} {:?}", style(Strings::summary_classify()).green(), config.classification);
         if config.classification == ClassificationRule::YearMonth {
@@ -655,7 +671,7 @@ pub fn run_with_progress(
     let mut processor = Processor::new(config)?;
 
     // Show scanning message
-    println!("\n{} {}", style("📁").cyan(), Strings::scanning_directories());
+    println!("\n{} {}", style(">").cyan(), Strings::scanning_directories());
 
     // Get results with progress
     let results = processor.run()?;
@@ -680,11 +696,11 @@ pub fn display_summary(stats: &ProcessingStats, results: &[FileResult], dry_run:
     let failed = stats.failed.load(Ordering::Relaxed);
 
     println!("\n  {} {}",
-        style("📊").cyan(),
+        style("#").cyan(),
         style(Strings::statistics()).bold()
     );
     println!("  {}", style("─".repeat(40)).dim());
-    println!("    {} {}     {}", style("📁").dim(), Strings::stat_total_files(), style(total).bold());
+    println!("    {} {}     {}", style(">").dim(), Strings::stat_total_files(), style(total).bold());
     println!("    {} {}       {}", style("✓").green(), Strings::stat_processed(), style(processed).green().bold());
     println!("    {} {}         {}", style("○").cyan(), Strings::stat_skipped(), style(skipped).cyan().bold());
     println!("    {} {}      {}", style("◎").yellow(), Strings::stat_duplicates(), style(duplicates).yellow().bold());
@@ -697,7 +713,7 @@ pub fn display_summary(stats: &ProcessingStats, results: &[FileResult], dry_run:
 
     if !failed_files.is_empty() {
         println!("\n  {} {}",
-            style("⚠").yellow(),
+            style("!").yellow(),
             style(Strings::failed_files()).yellow().bold()
         );
         println!("  {}", style("─".repeat(40)).dim());
@@ -714,7 +730,7 @@ pub fn display_summary(stats: &ProcessingStats, results: &[FileResult], dry_run:
     }
 
     if dry_run {
-        println!("\n  {}", style(format!("🔍 {}", Strings::dry_run_notice())).yellow().bold());
+        println!("\n  {}", style(format!("* {}", Strings::dry_run_notice())).yellow().bold());
     }
 
     println!("\n{}", style("═".repeat(60)).cyan());
