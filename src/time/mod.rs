@@ -39,6 +39,87 @@ pub struct ExtractedTime {
     pub source: TimeSource,
 }
 
+/// Unified datetime parsing utilities
+pub mod datetime {
+    use chrono::{DateTime, NaiveDateTime};
+
+    /// Common ISO 8601 formats for video metadata
+    const ISO8601_FORMATS: &[&str] = &[
+        "%Y-%m-%dT%H:%M:%S%.fZ",
+        "%Y-%m-%dT%H:%M:%SZ",
+        "%Y-%m-%dT%H:%M:%S%.f%:z",
+        "%Y-%m-%dT%H:%M:%S%:z",
+        "%Y-%m-%dT%H:%M:%S%.f%z",
+        "%Y-%m-%dT%H:%M:%S%z",
+        "%Y-%m-%dT%H:%M:%S%.f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S%.f",
+        "%Y-%m-%d %H:%M:%S",
+    ];
+
+    /// Common date formats for various sources
+    const DATE_FORMATS: &[&str] = &[
+        "%Y:%m:%d %H:%M:%S",
+        "%Y:%m:%d %H:%M:%S%.f",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y/%m/%d %H:%M:%S",
+    ];
+
+    /// Parse datetime string with multiple format attempts
+    ///
+    /// Returns `Some(NaiveDateTime)` if parsing succeeds, `None` otherwise.
+    /// Tries formats in order, returns on first success.
+    pub fn parse_multi(s: &str, formats: &[&str]) -> Option<NaiveDateTime> {
+        let s = s.trim();
+        for format in formats {
+            if let Ok(dt) = NaiveDateTime::parse_from_str(s, format) {
+                return Some(dt);
+            }
+        }
+        None
+    }
+
+    /// Parse datetime string with timezone (ISO 8601 variants)
+    ///
+    /// Handles formats with timezone info (Z, +08:00, etc.) and returns UTC.
+    /// Falls back to naive datetime if no timezone present.
+    /// Also handles RFC 3339 and date-only formats.
+    pub fn parse_video_datetime(s: &str) -> Option<NaiveDateTime> {
+        let s = s.trim();
+
+        // Try RFC 3339 first (more flexible)
+        if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+            return Some(dt.naive_utc());
+        }
+
+        // Try parsing with timezone and convert to UTC
+        for format in ISO8601_FORMATS {
+            if let Ok(dt) = DateTime::parse_from_str(s, format) {
+                return Some(dt.naive_utc());
+            }
+        }
+
+        // Try as naive datetime (assumed UTC)
+        if let Some(dt) = parse_multi(s, DATE_FORMATS) {
+            return Some(dt);
+        }
+
+        // Try parsing just the date part if time is missing
+        if let Ok(date) = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+            return date.and_hms_opt(0, 0, 0);
+        }
+
+        None
+    }
+
+    /// Parse EXIF format datetime string
+    pub fn parse_exif(s: &str) -> Option<NaiveDateTime> {
+        let s = s.trim().trim_matches('"');
+        parse_multi(s, DATE_FORMATS)
+    }
+}
+
 /// Extract creation time from a media file using multiple strategies
 ///
 /// The extraction follows this priority:
@@ -47,10 +128,7 @@ pub struct ExtractedTime {
 /// 3. Filename parsing
 /// 4. File system modification time
 pub fn extract_time(path: &Path, config: &Config) -> Result<ExtractedTime> {
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("");
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
     // Try EXIF for images
     if config.is_image(ext) {

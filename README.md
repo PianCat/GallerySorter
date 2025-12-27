@@ -2,7 +2,7 @@
 
 **[中文文档](README_zh.md)** | English
 
-A command-line tool for organizing photos and videos by their creation time. Built with Rust for high performance and reliability.
+A CLI tool for organizing photos and videos by their creation time. Built with Rust for high performance and reliability.
 
 ## Features
 
@@ -26,15 +26,20 @@ A command-line tool for organizing photos and videos by their creation time. Bui
   - **Full**: Processes all files, overwrites existing files in target.
 
 - **High Performance**:
-  - Parallel processing with Rayon
+  - Parallel processing with configurable thread count
   - Efficient buffered I/O for large files
-  - Sampled hashing for files over 100MB
+  - Sampled hashing for large files (configurable threshold)
 
 - **Interactive & CLI Modes**:
-  - Interactive wizard for first-time users
+  - Interactive TUI wizard with Ratatui for first-time users
   - Full CLI support with configuration files for automation
 
 - **Bilingual Support**: English and Chinese (Simplified) interface
+
+- **Advanced Configuration**:
+  - Exclude specific directories from scanning
+  - Customizable file extension lists
+  - Configurable state file for incremental processing
 
 ## Installation
 
@@ -50,13 +55,13 @@ For video metadata extraction, install FFprobe:
 - **macOS**: `brew install ffmpeg`
 - **Linux**: `apt install ffmpeg` or equivalent
 
-### Advanced: Building from Source
+### Building from Source
 
 Requires Rust 2024 edition or later.
 
 ```bash
-git clone https://github.com/yourusername/gallery-sorter.git
-cd gallery-sorter
+git clone https://github.com/PianCat/GallerySorter.git
+cd GallerySorter/GallerySorter_RS
 cargo build --release
 ```
 
@@ -72,7 +77,7 @@ Simply run the program without arguments:
 ./gallery-sorter
 ```
 
-This launches an interactive wizard to configure and run the sorter.
+This launches an interactive TUI wizard to configure and run the sorter.
 
 ### CLI Mode
 
@@ -81,14 +86,14 @@ This launches an interactive wizard to configure and run the sorter.
 ./gallery-sorter -i /path/to/photos -o /path/to/sorted
 
 # With configuration file
-./gallery-sorter -c MyConfig
+./gallery-sorter -C MyConfig
 
 # Full options
 ./gallery-sorter \
   -i /path/to/photos \
   -i /path/to/more/photos \
   -o /path/to/sorted \
-  -m incremental \
+  -M incremental \
   --classify year-month \
   --month-format nested \
   --operation copy \
@@ -100,17 +105,19 @@ This launches an interactive wizard to configure and run the sorter.
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--input` | `-i` | Input directory (can specify multiple) |
-| `--output` | `-o` | Output directory |
-| `--config` | `-c` | Configuration file path or name |
-| `--mode` | `-m` | Processing mode: `full`, `supplement`, `incremental` |
-| `--classify` | | Classification: `none`, `year`, `year-month` |
-| `--month-format` | | Month format: `nested`, `combined` |
-| `--classify-by-type` | | Add file type subdirectory (Images/Videos/RAW) |
-| `--operation` | | File operation: `copy`, `move`, `hardlink`, `symlink` |
-| `--deduplicate` | | Enable deduplication |
-| `--no-deduplicate` | | Disable deduplication |
-| `--dry-run` | | Show what would be done without doing it |
+| `--config` | `-C` | Path to configuration file (TOML format) |
+| `--input` | `-i` | Input directories to scan (can specify multiple) |
+| `--output` | `-o` | Output directory for organized files |
+| `--mode` | `-M` | Processing mode: `full`, `supplement`, `incremental` |
+| `--classify` | `-c` | Classification rule: `none`, `year`, `year-month` |
+| `--month-format` | `-m` | Month format: `nested`, `combined` |
+| `--classify-by-type` | | Classify by file type (adds Photos/Videos/RAW subdirectory) |
+| `--operation` | `-O` | File operation: `copy`, `move`, `hardlink`, `symlink` |
+| `--no-deduplicate` | | Disable file deduplication |
+| `--state-file` | | State file path for tracking processed files |
+| `--threads` | `-t` | Number of threads for parallel processing (0 = auto) |
+| `--large-file-mb` | | Large file threshold in MB (files larger use sampled hashing) |
+| `--dry-run` | `-n` | Show what would be done without doing it |
 | `--verbose` | `-v` | Verbose output |
 | `--json-log` | | Output logs in JSON format |
 
@@ -121,38 +128,66 @@ Place configuration files in the `Config/` directory next to the executable. Use
 ### Example: Config/Template.toml
 
 ```toml
-# Input directories to scan
+# Gallery Sorter Configuration File
+
+# Input directories to scan for media files
 input_dirs = [
-    "D:/DCIM",
-    "D:/Camera",
+    "D:/Photos",
+    "D:/Videos",
 ]
 
-# Output directory
-output_dir = "D:/Photos/Sorted"
+# Output directory for organized files
+output_dir = "D:/Sorted"
 
-# Processing mode: "full", "supplement", "incremental"
+# Directories to exclude from scanning
+# Can be absolute paths or folder names (will match any folder with that name)
+exclude_dirs = [
+    ".sync",
+    ".thumbnails",
+    "@eaDir",
+]
+
+# Processing mode: "full", "supplement", or "incremental"
 processing_mode = "incremental"
 
-# Classification: "none", "year", "year-month"
+# Classification rule: "none", "year", or "year-month"
 classification = "year-month"
 
-# Month format: "nested" (YYYY/MM/) or "combined" (YYYY-MM/)
+# Month format: "nested" or "combined"
 month_format = "nested"
 
-# Classify by file type (adds Images/Videos/RAW subdirectory)
+# Classify by file type (adds Photos/Videos subdirectory, RAW files nested under Photos/Raw)
 classify_by_type = false
 
-# File operation: "copy", "move", "hardlink", "symlink"
+# File operation: "copy", "move", "symlink", or "hardlink"
 operation = "copy"
 
-# Enable content-based deduplication
+# Enable file deduplication
 deduplicate = true
 
-# Preview mode (no actual file operations)
+# State file path for incremental processing
+# state_file = ".gallery_sorter_state.json"
+
+# Number of threads for parallel processing (0 = auto-detect)
+threads = 0
+
+# Large file threshold in bytes (files larger use sampled hashing)
+# Default: 100MB = 104857600 bytes
+large_file_threshold = 104857600
+
+# Dry run mode
 dry_run = false
+
+# Verbose output
+verbose = false
+
+# Supported file extensions (customize as needed)
+image_extensions = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "avif", "tiff", "tif"]
+video_extensions = ["mp4", "mov", "avi", "mkv", "wmv", "flv", "m4v", "3gp"]
+raw_extensions = ["raw", "arw", "cr2", "cr3", "nef", "orf", "rw2", "dng", "raf", "srw", "pef"]
 ```
 
-Use with: `./gallery-sorter -c Template`
+Use with: `./gallery-sorter -C Template`
 
 ## Processing Modes Explained
 
@@ -211,7 +246,7 @@ Default structure (classify_by_type = false):
 ```
 Output Directory/
 ├── .gallery_sorter_increment_metadata.toml  # Watermark file (incremental mode)
-├── .gallery_sorter_state.json               # Processing state (incremental mode)
+├── .gallery_sorter_state.json               # State file (incremental mode)
 ├── 2024/
 │   ├── 01/
 │   │   ├── IMG_20240115_143022.jpg
@@ -249,6 +284,8 @@ Log files are saved in the `Log/` directory next to the executable:
 2. **Use hardlink operation** on the same filesystem to save disk space
 3. **Disable deduplication** if you're sure there are no duplicates
 4. **Use dry-run first** to preview changes before actual processing
+5. **Adjust thread count** based on your CPU cores for optimal performance
+6. **Increase large file threshold** for SSDs, decrease for HDDs
 
 ## License
 

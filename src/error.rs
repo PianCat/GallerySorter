@@ -16,7 +16,10 @@ pub enum Error {
     ExifRead { path: PathBuf, message: String },
 
     #[error("Failed to parse timestamp from {source_info}: {message}")]
-    TimestampParse { source_info: String, message: String },
+    TimestampParse {
+        source_info: String,
+        message: String,
+    },
 
     #[error("Failed to extract video metadata from {path}: {message}")]
     VideoMetadata { path: PathBuf, message: String },
@@ -31,7 +34,10 @@ pub enum Error {
     Config(String),
 
     #[error("Duplicate file detected: {original} and {duplicate}")]
-    DuplicateFile { original: PathBuf, duplicate: PathBuf },
+    DuplicateFile {
+        original: PathBuf,
+        duplicate: PathBuf,
+    },
 
     #[error("Unsupported file format: {path}")]
     UnsupportedFormat { path: PathBuf },

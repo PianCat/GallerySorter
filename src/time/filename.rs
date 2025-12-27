@@ -1,51 +1,81 @@
 //! Filename timestamp parsing
 
 use chrono::NaiveDateTime;
-use lazy_static::lazy_static;
 use regex::Regex;
+use std::sync::OnceLock;
 use tracing::trace;
 
-lazy_static! {
-    /// Pattern: YYYYMMDD_HHmmss or YYYYMMDD-HHmmss
-    static ref PATTERN_COMPACT: Regex = Regex::new(
-        r"(\d{4})(\d{2})(\d{2})[_\-](\d{2})(\d{2})(\d{2})"
-    ).unwrap();
+/// Pattern: YYYYMMDD_HHmmss or YYYYMMDD-HHmmss
+static PATTERN_COMPACT: OnceLock<Regex> = OnceLock::new();
 
-    /// Pattern: YYYY-MM-DD_HH-mm-ss or similar with separators
-    static ref PATTERN_SEPARATED: Regex = Regex::new(
-        r"(\d{4})[-_](\d{2})[-_](\d{2})[-_\s](\d{2})[-_](\d{2})[-_](\d{2})"
-    ).unwrap();
+/// Pattern: YYYY-MM-DD_HH-mm-ss or similar with separators
+static PATTERN_SEPARATED: OnceLock<Regex> = OnceLock::new();
 
-    /// Pattern: IMG_YYYYMMDD_HHmmss (common camera naming)
-    static ref PATTERN_IMG: Regex = Regex::new(
-        r"(?:IMG|VID|DSC|DCIM|MOV|MVI|DJI|GOPR|GP)[-_]?(\d{4})(\d{2})(\d{2})[-_]?(\d{2})(\d{2})(\d{2})"
-    ).unwrap();
+/// Pattern: IMG_YYYYMMDD_HHmmss (common camera naming)
+static PATTERN_IMG: OnceLock<Regex> = OnceLock::new();
 
-    /// Pattern: Unix timestamp (10 or 13 digits)
-    static ref PATTERN_UNIX: Regex = Regex::new(
-        r"(\d{10}|\d{13})"
-    ).unwrap();
+/// Pattern: Unix timestamp (10 or 13 digits)
+static PATTERN_UNIX: OnceLock<Regex> = OnceLock::new();
 
-    /// Pattern: YYYYMMDD only (date without time)
-    static ref PATTERN_DATE_ONLY: Regex = Regex::new(
-        r"(\d{4})(\d{2})(\d{2})"
-    ).unwrap();
+/// Pattern: YYYYMMDD only (date without time)
+static PATTERN_DATE_ONLY: OnceLock<Regex> = OnceLock::new();
 
-    /// Pattern: Screenshot formats (common on various platforms)
-    static ref PATTERN_SCREENSHOT: Regex = Regex::new(
-        r"(?:Screenshot|Screen Shot|Capture|截图|截屏)[-_\s]*(\d{4})[-_]?(\d{2})[-_]?(\d{2})[-_\s]*(?:at[-_\s]*)?(\d{1,2})[-_\.]?(\d{2})[-_\.]?(\d{2})"
-    ).unwrap();
+/// Pattern: Screenshot formats (common on various platforms)
+static PATTERN_SCREENSHOT: OnceLock<Regex> = OnceLock::new();
 
-    /// Pattern: WhatsApp format (IMG-YYYYMMDD-WAxxxx)
-    static ref PATTERN_WHATSAPP: Regex = Regex::new(
-        r"(?:IMG|VID)[-_](\d{4})(\d{2})(\d{2})[-_]WA"
-    ).unwrap();
+/// Pattern: WhatsApp format (IMG-YYYYMMDD-WAxxxx)
+static PATTERN_WHATSAPP: OnceLock<Regex> = OnceLock::new();
+
+/// Get the compact pattern
+fn get_pattern_compact() -> &'static Regex {
+    PATTERN_COMPACT
+        .get_or_init(|| Regex::new(r"(\d{4})(\d{2})(\d{2})[_\-](\d{2})(\d{2})(\d{2})").unwrap())
+}
+
+/// Get the separated pattern
+fn get_pattern_separated() -> &'static Regex {
+    PATTERN_SEPARATED.get_or_init(|| {
+        Regex::new(r"(\d{4})[-_](\d{2})[-_](\d{2})[-_\s](\d{2})[-_](\d{2})[-_](\d{2})").unwrap()
+    })
+}
+
+/// Get the IMG pattern
+fn get_pattern_img() -> &'static Regex {
+    PATTERN_IMG.get_or_init(|| Regex::new(r"(?:IMG|VID|DSC|DCIM|MOV|MVI|DJI|GOPR|GP)[-_]?(\d{4})(\d{2})(\d{2})[-_]?(\d{2})(\d{2})(\d{2})").unwrap())
+}
+
+/// Get the Unix pattern
+fn get_pattern_unix() -> &'static Regex {
+    PATTERN_UNIX.get_or_init(|| Regex::new(r"(\d{10}|\d{13})").unwrap())
+}
+
+/// Get the date-only pattern
+fn get_pattern_date_only() -> &'static Regex {
+    PATTERN_DATE_ONLY.get_or_init(|| Regex::new(r"(\d{4})(\d{2})(\d{2})").unwrap())
+}
+
+/// Get the screenshot pattern
+fn get_pattern_screenshot() -> &'static Regex {
+    PATTERN_SCREENSHOT.get_or_init(|| Regex::new(r"(?:Screenshot|Screen Shot|Capture|截图|截屏)[-_\s]*(\d{4})[-_]?(\d{2})[-_]?(\d{2})[-_\s]*(?:at[-_\s]*)?(\d{1,2})[-_\.]?(\d{2})[-_\.]?(\d{2})").unwrap())
+}
+
+/// Get the WhatsApp pattern
+fn get_pattern_whatsapp() -> &'static Regex {
+    PATTERN_WHATSAPP
+        .get_or_init(|| Regex::new(r"(?:IMG|VID)[-_](\d{4})(\d{2})(\d{2})[-_]WA").unwrap())
 }
 
 /// Parse timestamp from filename using various patterns
 pub fn parse_filename_time(filename: &str) -> Option<NaiveDateTime> {
     // Remove extension for cleaner parsing
-    let name = filename.rsplit('.').skip(1).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join(".");
+    let name = filename
+        .rsplit('.')
+        .skip(1)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join(".");
     let name = if name.is_empty() { filename } else { &name };
 
     // Try compact format first (most common)
@@ -94,7 +124,7 @@ pub fn parse_filename_time(filename: &str) -> Option<NaiveDateTime> {
 }
 
 fn try_pattern_compact(s: &str) -> Option<NaiveDateTime> {
-    let caps = PATTERN_COMPACT.captures(s)?;
+    let caps = get_pattern_compact().captures(s)?;
     build_datetime(
         caps.get(1)?.as_str(),
         caps.get(2)?.as_str(),
@@ -106,7 +136,7 @@ fn try_pattern_compact(s: &str) -> Option<NaiveDateTime> {
 }
 
 fn try_pattern_img(s: &str) -> Option<NaiveDateTime> {
-    let caps = PATTERN_IMG.captures(s)?;
+    let caps = get_pattern_img().captures(s)?;
     build_datetime(
         caps.get(1)?.as_str(),
         caps.get(2)?.as_str(),
@@ -118,7 +148,7 @@ fn try_pattern_img(s: &str) -> Option<NaiveDateTime> {
 }
 
 fn try_pattern_screenshot(s: &str) -> Option<NaiveDateTime> {
-    let caps = PATTERN_SCREENSHOT.captures(s)?;
+    let caps = get_pattern_screenshot().captures(s)?;
     build_datetime(
         caps.get(1)?.as_str(),
         caps.get(2)?.as_str(),
@@ -130,7 +160,7 @@ fn try_pattern_screenshot(s: &str) -> Option<NaiveDateTime> {
 }
 
 fn try_pattern_separated(s: &str) -> Option<NaiveDateTime> {
-    let caps = PATTERN_SEPARATED.captures(s)?;
+    let caps = get_pattern_separated().captures(s)?;
     build_datetime(
         caps.get(1)?.as_str(),
         caps.get(2)?.as_str(),
@@ -142,7 +172,7 @@ fn try_pattern_separated(s: &str) -> Option<NaiveDateTime> {
 }
 
 fn try_pattern_whatsapp(s: &str) -> Option<NaiveDateTime> {
-    let caps = PATTERN_WHATSAPP.captures(s)?;
+    let caps = get_pattern_whatsapp().captures(s)?;
     build_datetime(
         caps.get(1)?.as_str(),
         caps.get(2)?.as_str(),
@@ -154,7 +184,7 @@ fn try_pattern_whatsapp(s: &str) -> Option<NaiveDateTime> {
 }
 
 fn try_pattern_unix(s: &str) -> Option<NaiveDateTime> {
-    let caps = PATTERN_UNIX.captures(s)?;
+    let caps = get_pattern_unix().captures(s)?;
     let timestamp_str = caps.get(1)?.as_str();
     let timestamp: i64 = timestamp_str.parse().ok()?;
 
@@ -166,7 +196,7 @@ fn try_pattern_unix(s: &str) -> Option<NaiveDateTime> {
     };
 
     // Validate reasonable timestamp range (1990-2100)
-    if timestamp < 631152000 || timestamp > 4102444800 {
+    if !(631152000..=4102444800).contains(&timestamp) {
         return None;
     }
 
@@ -174,7 +204,7 @@ fn try_pattern_unix(s: &str) -> Option<NaiveDateTime> {
 }
 
 fn try_pattern_date_only(s: &str) -> Option<NaiveDateTime> {
-    let caps = PATTERN_DATE_ONLY.captures(s)?;
+    let caps = get_pattern_date_only().captures(s)?;
     build_datetime(
         caps.get(1)?.as_str(),
         caps.get(2)?.as_str(),
@@ -214,8 +244,7 @@ fn build_datetime(
         return None;
     }
 
-    chrono::NaiveDate::from_ymd_opt(year, month, day)?
-        .and_hms_opt(hour, minute, second)
+    chrono::NaiveDate::from_ymd_opt(year, month, day)?.and_hms_opt(hour, minute, second)
 }
 
 #[cfg(test)]

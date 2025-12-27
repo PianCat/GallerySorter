@@ -81,14 +81,12 @@ impl ProcessingState {
             return Ok(Self::new());
         }
 
-        let file = File::open(path).map_err(|e| Error::StateFile(format!(
-            "Failed to open state file: {}", e
-        )))?;
+        let file = File::open(path)
+            .map_err(|e| Error::StateFile(format!("Failed to open state file: {}", e)))?;
         let reader = BufReader::new(file);
 
-        let state: Self = serde_json::from_reader(reader).map_err(|e| Error::StateFile(format!(
-            "Failed to parse state file: {}", e
-        )))?;
+        let state: Self = serde_json::from_reader(reader)
+            .map_err(|e| Error::StateFile(format!("Failed to parse state file: {}", e)))?;
 
         if state.version != Self::VERSION {
             warn!(
@@ -119,19 +117,16 @@ impl ProcessingState {
         // Write to a temporary file first, then rename for atomicity
         let temp_path = path.with_extension("tmp");
 
-        let file = File::create(&temp_path).map_err(|e| Error::StateFile(format!(
-            "Failed to create temp state file: {}", e
-        )))?;
+        let file = File::create(&temp_path)
+            .map_err(|e| Error::StateFile(format!("Failed to create temp state file: {}", e)))?;
         let writer = BufWriter::new(file);
 
-        serde_json::to_writer_pretty(writer, self).map_err(|e| Error::StateFile(format!(
-            "Failed to write state file: {}", e
-        )))?;
+        serde_json::to_writer_pretty(writer, self)
+            .map_err(|e| Error::StateFile(format!("Failed to write state file: {}", e)))?;
 
         // Atomic rename
-        fs::rename(&temp_path, path).map_err(|e| Error::StateFile(format!(
-            "Failed to rename temp state file: {}", e
-        )))?;
+        fs::rename(&temp_path, path)
+            .map_err(|e| Error::StateFile(format!("Failed to rename temp state file: {}", e)))?;
 
         info!(
             files_tracked = self.processed_files.len(),
@@ -309,13 +304,11 @@ impl IncrementalWatermark {
             return Ok(None);
         }
 
-        let content = fs::read_to_string(&path).map_err(|e| {
-            Error::StateFile(format!("Failed to read watermark file: {}", e))
-        })?;
+        let content = fs::read_to_string(&path)
+            .map_err(|e| Error::StateFile(format!("Failed to read watermark file: {}", e)))?;
 
-        let watermark: Self = toml::from_str(&content).map_err(|e| {
-            Error::StateFile(format!("Failed to parse watermark file: {}", e))
-        })?;
+        let watermark: Self = toml::from_str(&content)
+            .map_err(|e| Error::StateFile(format!("Failed to parse watermark file: {}", e)))?;
 
         if watermark.version != Self::VERSION {
             warn!(
@@ -344,19 +337,16 @@ impl IncrementalWatermark {
             fs::create_dir_all(parent)?;
         }
 
-        let content = toml::to_string_pretty(self).map_err(|e| {
-            Error::StateFile(format!("Failed to serialize watermark: {}", e))
-        })?;
+        let content = toml::to_string_pretty(self)
+            .map_err(|e| Error::StateFile(format!("Failed to serialize watermark: {}", e)))?;
 
         // Write atomically via temp file
         let temp_path = path.with_extension("tmp");
-        fs::write(&temp_path, &content).map_err(|e| {
-            Error::StateFile(format!("Failed to write watermark file: {}", e))
-        })?;
+        fs::write(&temp_path, &content)
+            .map_err(|e| Error::StateFile(format!("Failed to write watermark file: {}", e)))?;
 
-        fs::rename(&temp_path, &path).map_err(|e| {
-            Error::StateFile(format!("Failed to rename watermark file: {}", e))
-        })?;
+        fs::rename(&temp_path, &path)
+            .map_err(|e| Error::StateFile(format!("Failed to rename watermark file: {}", e)))?;
 
         info!(
             newest_file = %self.newest_file_path.display(),
@@ -406,10 +396,10 @@ impl IncrementalWatermark {
             }
 
             // Skip hidden files and the watermark file itself
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.starts_with('.') {
-                    continue;
-                }
+            if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                && name.starts_with('.')
+            {
+                continue;
             }
 
             // Check if supported extension
@@ -427,12 +417,9 @@ impl IncrementalWatermark {
             }
 
             // Try to extract timestamp from directory structure
-            if let Some(timestamp) = Self::extract_timestamp_from_path(
-                path,
-                output_dir,
-                classification,
-                month_format,
-            ) {
+            if let Some(timestamp) =
+                Self::extract_timestamp_from_path(path, output_dir, classification, month_format)
+            {
                 match &newest {
                     Some((_, newest_ts)) if timestamp > *newest_ts => {
                         newest = Some((path.to_path_buf(), timestamp));
@@ -448,13 +435,9 @@ impl IncrementalWatermark {
         match newest {
             Some((path, timestamp)) => {
                 // Compute hash for verification
-                let hash = crate::hash::compute_file_hash(&path, 100 * 1024 * 1024)
-                    .unwrap_or(0);
+                let hash = crate::hash::compute_file_hash(&path, 100 * 1024 * 1024).unwrap_or(0);
 
-                let relative_path = path
-                    .strip_prefix(output_dir)
-                    .unwrap_or(&path)
-                    .to_path_buf();
+                let relative_path = path.strip_prefix(output_dir).unwrap_or(&path).to_path_buf();
 
                 info!(
                     newest_file = %relative_path.display(),
@@ -637,7 +620,8 @@ mod tests {
 
     #[test]
     fn test_watermark_new() {
-        let timestamp = NaiveDateTime::parse_from_str("2024-06-15 14:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
+        let timestamp =
+            NaiveDateTime::parse_from_str("2024-06-15 14:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
         let wm = IncrementalWatermark::new(
             PathBuf::from("2024/06/photo.jpg"),
             timestamp,
@@ -653,7 +637,8 @@ mod tests {
 
     #[test]
     fn test_watermark_is_newer() {
-        let timestamp = NaiveDateTime::parse_from_str("2024-06-15 14:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
+        let timestamp =
+            NaiveDateTime::parse_from_str("2024-06-15 14:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
         let wm = IncrementalWatermark::new(
             PathBuf::from("photo.jpg"),
             timestamp,
@@ -663,20 +648,23 @@ mod tests {
         );
 
         // Older timestamp - should not be newer
-        let older = NaiveDateTime::parse_from_str("2024-05-01 10:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
+        let older =
+            NaiveDateTime::parse_from_str("2024-05-01 10:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
         assert!(!wm.is_newer(&older));
 
         // Same timestamp - should not be newer
         assert!(!wm.is_newer(&timestamp));
 
         // Newer timestamp - should be newer
-        let newer = NaiveDateTime::parse_from_str("2024-07-01 10:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
+        let newer =
+            NaiveDateTime::parse_from_str("2024-07-01 10:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
         assert!(wm.is_newer(&newer));
     }
 
     #[test]
     fn test_watermark_update_if_newer() {
-        let timestamp1 = NaiveDateTime::parse_from_str("2024-06-15 14:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
+        let timestamp1 =
+            NaiveDateTime::parse_from_str("2024-06-15 14:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
         let mut wm = IncrementalWatermark::new(
             PathBuf::from("2024/06/photo1.jpg"),
             timestamp1,
@@ -686,13 +674,15 @@ mod tests {
         );
 
         // Try to update with older timestamp - should not change
-        let older = NaiveDateTime::parse_from_str("2024-05-01 10:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
+        let older =
+            NaiveDateTime::parse_from_str("2024-05-01 10:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
         wm.update_if_newer(PathBuf::from("2024/05/old.jpg"), older, 99999);
         assert_eq!(wm.newest_timestamp, timestamp1);
         assert_eq!(wm.newest_hash, 12345);
 
         // Update with newer timestamp - should change
-        let newer = NaiveDateTime::parse_from_str("2024-07-20 18:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
+        let newer =
+            NaiveDateTime::parse_from_str("2024-07-20 18:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
         wm.update_if_newer(PathBuf::from("2024/07/new.jpg"), newer, 67890);
         assert_eq!(wm.newest_timestamp, newer);
         assert_eq!(wm.newest_hash, 67890);
@@ -704,7 +694,8 @@ mod tests {
         let dir = tempdir().unwrap();
         let output_dir = dir.path();
 
-        let timestamp = NaiveDateTime::parse_from_str("2024-06-15 14:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
+        let timestamp =
+            NaiveDateTime::parse_from_str("2024-06-15 14:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
         let wm = IncrementalWatermark::new(
             PathBuf::from("2024/06/photo.jpg"),
             timestamp,

@@ -101,6 +101,7 @@ pub struct Config {
     pub classification: ClassificationRule,
 
     /// Month format for year-month classification
+    #[serde(default)]
     pub month_format: MonthFormat,
 
     /// Classify by file type (adds Photos/Videos subdirectory, RAW files nested under Photos/Raw)
@@ -151,23 +152,45 @@ impl Default for Config {
             operation: FileOperation::default(),
             deduplicate: true,
             state_file: None,
-            threads: 0, // Auto-detect
+            threads: 0,                              // Auto-detect
             large_file_threshold: 100 * 1024 * 1024, // 100MB
             dry_run: false,
             verbose: false,
             image_extensions: vec![
-                "jpg".into(), "jpeg".into(), "png".into(), "gif".into(),
-                "bmp".into(), "webp".into(), "heic".into(), "heif".into(),
-                "avif".into(), "tiff".into(), "tif".into(),
+                "jpg".into(),
+                "jpeg".into(),
+                "png".into(),
+                "gif".into(),
+                "bmp".into(),
+                "webp".into(),
+                "heic".into(),
+                "heif".into(),
+                "avif".into(),
+                "tiff".into(),
+                "tif".into(),
             ],
             video_extensions: vec![
-                "mp4".into(), "mov".into(), "avi".into(), "mkv".into(),
-                "wmv".into(), "flv".into(), "m4v".into(), "3gp".into(),
+                "mp4".into(),
+                "mov".into(),
+                "avi".into(),
+                "mkv".into(),
+                "wmv".into(),
+                "flv".into(),
+                "m4v".into(),
+                "3gp".into(),
             ],
             raw_extensions: vec![
-                "raw".into(), "arw".into(), "cr2".into(), "cr3".into(),
-                "nef".into(), "orf".into(), "rw2".into(), "dng".into(),
-                "raf".into(), "srw".into(), "pef".into(),
+                "raw".into(),
+                "arw".into(),
+                "cr2".into(),
+                "cr3".into(),
+                "nef".into(),
+                "orf".into(),
+                "rw2".into(),
+                "dng".into(),
+                "raf".into(),
+                "srw".into(),
+                "pef".into(),
             ],
         }
     }
@@ -265,9 +288,8 @@ impl Config {
             })?;
         }
 
-        let content = toml::to_string_pretty(self).map_err(|e| ConfigError::SerializeError {
-            source: e,
-        })?;
+        let content =
+            toml::to_string_pretty(self).map_err(|e| ConfigError::SerializeError { source: e })?;
 
         fs::write(path, content).map_err(|e| ConfigError::WriteError {
             path: path.to_path_buf(),
@@ -355,55 +377,33 @@ raw_extensions = ["raw", "arw", "cr2", "cr3", "nef", "orf", "rw2", "dng", "raf",
 }
 
 /// Errors that can occur when loading or saving configuration
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     /// Failed to read configuration file
+    #[error("Failed to read config file '{}': {source}", .path.display())]
     ReadError {
         path: PathBuf,
+        #[source]
         source: std::io::Error,
     },
     /// Failed to parse configuration file
+    #[error("Failed to parse config file '{}': {source}", .path.display())]
     ParseError {
         path: PathBuf,
+        #[source]
         source: toml::de::Error,
     },
     /// Failed to write configuration file
+    #[error("Failed to write config file '{}': {source}", .path.display())]
     WriteError {
         path: PathBuf,
+        #[source]
         source: std::io::Error,
     },
     /// Failed to serialize configuration
+    #[error("Failed to serialize config: {source}")]
     SerializeError {
+        #[source]
         source: toml::ser::Error,
     },
-}
-
-impl std::fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ConfigError::ReadError { path, source } => {
-                write!(f, "Failed to read config file '{}': {}", path.display(), source)
-            }
-            ConfigError::ParseError { path, source } => {
-                write!(f, "Failed to parse config file '{}': {}", path.display(), source)
-            }
-            ConfigError::WriteError { path, source } => {
-                write!(f, "Failed to write config file '{}': {}", path.display(), source)
-            }
-            ConfigError::SerializeError { source } => {
-                write!(f, "Failed to serialize config: {}", source)
-            }
-        }
-    }
-}
-
-impl std::error::Error for ConfigError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            ConfigError::ReadError { source, .. } => Some(source),
-            ConfigError::ParseError { source, .. } => Some(source),
-            ConfigError::WriteError { source, .. } => Some(source),
-            ConfigError::SerializeError { source } => Some(source),
-        }
-    }
 }

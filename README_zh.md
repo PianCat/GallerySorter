@@ -2,7 +2,7 @@
 
 **[English](README.md)** | 中文文档
 
-一个照片和视频整理的命令行工具，基于文件创建时间进行分类。使用 Rust 构建，具有高性能和高可靠性。
+一个照片和视频整理命令行工具，基于文件创建时间进行分类。使用 Rust 构建，具有高性能和高可靠性。
 
 ## 功能特性
 
@@ -26,17 +26,22 @@
   - **完整模式**：处理所有文件，覆盖目标目录中的现有文件。
 
 - **高性能**：
-  - 使用 Rayon 进行并行处理
+  - 可配置线程数的并行处理
   - 大文件高效缓冲 I/O
-  - 超过 100MB 的文件采用采样哈希
+  - 大文件采用采样哈希（阈值可配置）
 
 - **交互式和命令行双模式**：
-  - 交互式向导，适合首次使用
+  - 基于 Ratatui 的交互式 TUI 向导，适合首次使用
   - 完整的命令行支持，可配合配置文件实现自动化
 
 - **双语支持**：支持中文和英文界面
 
-## 使用
+- **高级配置**：
+  - 从扫描中排除特定目录
+  - 可自定义文件扩展名列表
+  - 可配置增量处理状态文件
+
+## 安装
 
 ### 从 Github Releases 下载
 
@@ -50,13 +55,13 @@
 - **macOS**：`brew install ffmpeg`
 - **Linux**：`apt install ffmpeg` 或相应包管理器命令
 
-### 进阶：从源码编译
+### 从源码编译
 
 需要 Rust 2024 版本或更高版本。
 
 ```bash
-git clone https://github.com/yourusername/gallery-sorter.git
-cd gallery-sorter
+git clone https://github.com/PianCat/GallerySorter.git
+cd GallerySorter/GallerySorter_RS
 cargo build --release
 ```
 
@@ -72,7 +77,7 @@ cargo build --release
 ./gallery-sorter
 ```
 
-这将启动交互式配置向导。
+这将启动交互式 TUI 配置向导。
 
 ### 命令行模式
 
@@ -81,14 +86,14 @@ cargo build --release
 ./gallery-sorter -i /path/to/photos -o /path/to/sorted
 
 # 使用配置文件
-./gallery-sorter -c MyConfig
+./gallery-sorter -C MyConfig
 
 # 完整参数示例
 ./gallery-sorter \
   -i /path/to/photos \
   -i /path/to/more/photos \
   -o /path/to/sorted \
-  -m incremental \
+  -M incremental \
   --classify year-month \
   --month-format nested \
   --operation copy \
@@ -100,17 +105,19 @@ cargo build --release
 
 | 参数 | 简写 | 说明 |
 |------|------|------|
+| `--config` | `-C` | 配置文件路径（TOML 格式） |
 | `--input` | `-i` | 输入目录（可指定多个） |
 | `--output` | `-o` | 输出目录 |
-| `--config` | `-c` | 配置文件路径或名称 |
-| `--mode` | `-m` | 处理模式：`full`、`supplement`、`incremental` |
-| `--classify` | | 分类规则：`none`、`year`、`year-month` |
-| `--month-format` | | 月份格式：`nested`、`combined` |
-| `--classify-by-type` | | 按文件类型分类（添加 Images/Videos/RAW 子目录） |
-| `--operation` | | 文件操作：`copy`、`move`、`hardlink`、`symlink` |
-| `--deduplicate` | | 启用去重 |
-| `--no-deduplicate` | | 禁用去重 |
-| `--dry-run` | | 预览模式，显示操作但不执行 |
+| `--mode` | `-M` | 处理模式：`full`、`supplement`、`incremental` |
+| `--classify` | `-c` | 分类规则：`none`、`year`、`year-month` |
+| `--month-format` | `-m` | 月份格式：`nested`、`combined` |
+| `--classify-by-type` | | 按文件类型分类（添加 Photos/Videos/RAW 子目录） |
+| `--operation` | `-O` | 文件操作：`copy`、`move`、`hardlink`、`symlink` |
+| `--no-deduplicate` | | 禁用文件去重 |
+| `--state-file` | | 增量处理状态文件路径 |
+| `--threads` | `-t` | 并行处理的线程数（0 = 自动） |
+| `--large-file-mb` | | 大文件阈值（MB，超过此大小的文件使用采样哈希） |
+| `--dry-run` | `-n` | 预览模式，显示操作但不执行 |
 | `--verbose` | `-v` | 详细输出 |
 | `--json-log` | | 以 JSON 格式输出日志 |
 
@@ -121,38 +128,66 @@ cargo build --release
 ### 示例：Config/Template.toml
 
 ```toml
+# Gallery Sorter 配置文件
+
 # 要扫描的输入目录
 input_dirs = [
-    "D:/DCIM",
-    "D:/Camera",
+    "D:/Photos",
+    "D:/Videos",
 ]
 
 # 输出目录
-output_dir = "D:/Photos/Sorted"
+output_dir = "D:/Sorted"
 
-# 处理模式："full"、"supplement"、"incremental"
+# 要从扫描中排除的目录
+# 可以是绝对路径或文件夹名称（将匹配任何同名的文件夹）
+exclude_dirs = [
+    ".sync",
+    ".thumbnails",
+    "@eaDir",
+]
+
+# 处理模式："full"、"supplement" 或 "incremental"
 processing_mode = "incremental"
 
-# 分类规则："none"、"year"、"year-month"
+# 分类规则："none"、"year" 或 "year-month"
 classification = "year-month"
 
-# 月份格式："nested"（YYYY/MM/）或 "combined"（YYYY-MM/）
+# 月份格式："nested" 或 "combined"
 month_format = "nested"
 
-# 按文件类型分类（在时间目录后添加 Images/Videos/RAW 子目录）
+# 按文件类型分类（在时间目录后添加 Photos/Videos 子目录，RAW 文件嵌套在 Photos/Raw 下）
 classify_by_type = false
 
-# 文件操作："copy"、"move"、"hardlink"、"symlink"
+# 文件操作："copy"、"move"、"symlink" 或 "hardlink"
 operation = "copy"
 
-# 启用基于内容的去重
+# 启用文件去重
 deduplicate = true
 
-# 预览模式（不执行实际操作）
+# 增量处理状态文件路径
+# state_file = ".gallery_sorter_state.json"
+
+# 并行处理的线程数（0 = 自动检测）
+threads = 0
+
+# 大文件阈值（字节），超过此大小的文件使用采样哈希
+# 默认值：100MB = 104857600 字节
+large_file_threshold = 104857600
+
+# 预览模式
 dry_run = false
+
+# 详细输出
+verbose = false
+
+# 支持的文件扩展名（可根据需要自定义）
+image_extensions = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "avif", "tiff", "tif"]
+video_extensions = ["mp4", "mov", "avi", "mkv", "wmv", "flv", "m4v", "3gp"]
+raw_extensions = ["raw", "arw", "cr2", "cr3", "nef", "orf", "rw2", "dng", "raf", "srw", "pef"]
 ```
 
-使用方法：`./gallery-sorter -c Template`
+使用方法：`./gallery-sorter -C Template`
 
 ## 处理模式详解
 
@@ -211,7 +246,7 @@ dry_run = false
 ```
 输出目录/
 ├── .gallery_sorter_increment_metadata.toml  # 水位线文件（增量模式）
-├── .gallery_sorter_state.json               # 处理状态文件（增量模式）
+├── .gallery_sorter_state.json               # 状态文件（增量模式）
 ├── 2024/
 │   ├── 01/
 │   │   ├── IMG_20240115_143022.jpg
@@ -249,6 +284,8 @@ dry_run = false
 2. **使用硬链接操作** 在同一文件系统上节省磁盘空间
 3. **禁用去重** 如果确定没有重复文件（可加快处理速度）
 4. **先使用预览模式** 在实际处理前预览更改
+5. **根据 CPU 核心数调整线程数** 以获得最佳性能
+6. **针对 SSD 提高大文件阈值**，针对 HDD 降低阈值
 
 ## 许可证
 

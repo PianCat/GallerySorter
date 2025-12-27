@@ -1,0 +1,80 @@
+# Gallery Sorter Configuration File
+# This file uses TOML format (https://toml.io)
+
+# Input directories to scan for media files
+# Can specify multiple directories
+input_dirs = [
+    "D:/Photos",
+    "D:/Videos",
+]
+
+# Output directory for organized files
+output_dir = "D:/Sorted"
+
+# Directories to exclude from scanning
+# Can be absolute paths or folder names (will match any folder with that name)
+# Examples:
+#   - ".sync" - excludes any folder named ".sync"
+#   - "D:/Photos/.thumbnails" - excludes this specific folder
+exclude_dirs = [
+    ".sync",
+    ".thumbnails",
+    "@eaDir",
+]
+
+# Processing mode: "full", "supplement", or "incremental"
+# - full: Process all files, overwrite existing files in target
+# - supplement: Skip files that already exist in target
+# - incremental: Only process files newer than newest in target (default)
+processing_mode = "incremental"
+
+# Classification rule: "none", "year", or "year-month"
+# - none: All files go to output directory root
+# - year: Organize by year (YYYY/)
+# - year-month: Organize by year and month (YYYY/MM/)
+classification = "year-month"
+
+# Month format: "nested" or "combined"
+# - nested: YYYY/MM/
+# - combined: YYYY-MM/
+month_format = "nested"
+
+# Classify by file type (adds Photos/Videos subdirectory, RAW files nested under Photos/Raw)
+# - false: 2024/01/photo.jpg (default)
+# - true: 2024/01/Photos/photo.jpg, 2024/01/Photos/Raw/photo.arw
+classify_by_type = false
+
+# File operation: "copy", "move", "symlink", or "hardlink"
+operation = "copy"
+
+# Enable file deduplication (skip duplicate files)
+deduplicate = true
+
+# State file path for incremental processing
+# Uncomment and modify if you want to use a custom state file path
+# state_file = ".gallery_sorter_state.json"
+
+# Number of threads for parallel processing (0 = auto-detect CPU cores)
+# Example: 4 = use 4 threads, 0 = use all available cores
+threads = 0
+
+# Large file threshold in bytes (files larger than this use sampled hashing)
+# This improves performance for very large files by only hashing portions of them
+# Default: 100MB = 104857600 bytes
+large_file_threshold = 104857600
+
+# Dry run mode - show what would be done without actually doing it
+dry_run = false
+
+# Verbose output - show detailed processing information
+verbose = false
+
+# Supported file extensions (customize as needed)
+# EXIF extraction supported: jpg, jpeg, png, webp, heic, heif, avif, tiff, tif
+image_extensions = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "avif", "tiff", "tif"]
+
+# Video extensions (FFprobe metadata extraction supported)
+video_extensions = ["mp4", "mov", "avi", "mkv", "wmv", "flv", "m4v", "3gp"]
+
+# RAW image extensions
+raw_extensions = ["raw", "arw", "cr2", "cr3", "nef", "orf", "rw2", "dng", "raf", "srw", "pef"]

@@ -18,15 +18,15 @@ pub mod config;
 pub mod error;
 pub mod hash;
 pub mod i18n;
-pub mod interactive;
 pub mod process;
 pub mod state;
 pub mod time;
+pub mod tui;
 
 pub use cli::Cli;
 pub use config::{ClassificationRule, Config, ConfigError, FileType, MonthFormat, ProcessingMode};
 pub use error::{Error, Result};
 pub use i18n::init_locale;
-pub use interactive::{InteractiveAction, InteractiveResult, InteractiveWizard, ProgressDisplay, should_run_interactive, display_summary};
 pub use process::Processor;
 pub use state::{IncrementalWatermark, ProcessingState};
+pub use tui::{TuiApp, TuiResult, display_summary, should_run_interactive};

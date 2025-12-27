@@ -6,13 +6,15 @@
 //! - Computing hashes for deduplication
 //! - Organizing files to output directory
 
-use crate::config::{ClassificationRule, Config, FileOperation, FileType, MonthFormat, ProcessingMode};
+use crate::config::{
+    ClassificationRule, Config, FileOperation, FileType, MonthFormat, ProcessingMode,
+};
 use crate::error::{Error, Result};
 use crate::hash::{compute_file_hash, compute_metadata_hash};
 use crate::state::{IncrementalWatermark, ProcessingState};
-use crate::time::{extract_time, ExtractedTime};
+use crate::time::{ExtractedTime, extract_time};
 use chrono::{Datelike, NaiveDateTime};
-use lazy_static::lazy_static;
+
 use rayon::prelude::*;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
@@ -20,25 +22,25 @@ use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
-use tracing::{debug, error, info, span, warn, Level};
+use std::sync::{Arc, Mutex, OnceLock};
+use tracing::{Level, debug, error, info, span, warn};
 use walkdir::WalkDir;
 
-lazy_static! {
-    /// Patterns that indicate a file is a copy/duplicate (lower priority)
-    static ref COPY_PATTERNS: Vec<Regex> = vec![
-        // Chinese "copy" indicator: "- 副本"
-        Regex::new(r" - 副本").unwrap(),
-        // Numeric suffix before extension: "_1", "_2", etc.
-        Regex::new(r"_\d+$").unwrap(),
-        // Space + number suffix: " 1", " 2", etc.
-        Regex::new(r" \d+$").unwrap(),
-        // Parenthesized number: "(1)", "(2)", etc.
-        Regex::new(r"\(\d+\)$").unwrap(),
-        // "copy" keyword variations
-        Regex::new(r"(?i)[- _]copy").unwrap(),
-        Regex::new(r"(?i)[- _]копия").unwrap(), // Russian "copy"
-    ];
+/// Patterns that indicate a file is a copy/duplicate (lower priority)
+static COPY_PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
+
+/// Initialize COPY_PATTERNS on first use
+fn get_copy_patterns() -> &'static Vec<Regex> {
+    COPY_PATTERNS.get_or_init(|| {
+        vec![
+            Regex::new(r" - 副本").unwrap(),
+            Regex::new(r"_\d+$").unwrap(),
+            Regex::new(r" \d+$").unwrap(),
+            Regex::new(r"\(\d+\)$").unwrap(),
+            Regex::new(r"(?i)[- _]copy").unwrap(),
+            Regex::new(r"(?i)[- _]копия").unwrap(),
+        ]
+    })
 }
 
 /// Calculate filename priority score (lower = better/cleaner filename)
@@ -55,7 +57,7 @@ fn filename_priority_score(path: &Path) -> u32 {
 
     // Secondary: penalty for copy indicators (to break ties)
     let mut copy_penalty = 0u32;
-    for pattern in COPY_PATTERNS.iter() {
+    for pattern in get_copy_patterns().iter() {
         if pattern.is_match(filename) {
             copy_penalty += 1000;
         }
@@ -138,7 +140,7 @@ pub struct Processor {
     config: Config,
     state: ProcessingState,
     watermark: Option<IncrementalWatermark>,
-    stats: ProcessingStats,
+    stats: Arc<ProcessingStats>,
 }
 
 impl Processor {
@@ -225,8 +227,15 @@ impl Processor {
             config,
             state,
             watermark,
-            stats: ProcessingStats::new(),
+            stats: Arc::new(ProcessingStats::new()),
         })
+    }
+
+    /// Get the total number of files that would be processed
+    /// This can be called before run() to get the file count for progress tracking
+    pub fn total_files_count(&self) -> Result<usize> {
+        let files = self.collect_files()?;
+        Ok(files.len())
     }
 
     /// Run the processing pipeline
@@ -255,7 +264,8 @@ impl Processor {
 
         // Incremental mode: Filter files by timestamp using watermark
         // This is done BEFORE computing hashes to minimize disk I/O
-        let (files, skipped_by_watermark) = if config.processing_mode == ProcessingMode::Incremental {
+        let (files, skipped_by_watermark) = if config.processing_mode == ProcessingMode::Incremental
+        {
             if let Some(ref watermark) = self.watermark {
                 info!(
                     watermark_timestamp = %watermark.newest_timestamp,
@@ -301,7 +311,9 @@ impl Processor {
         };
 
         // Update skipped count
-        self.stats.skipped.fetch_add(skipped_by_watermark, Ordering::Relaxed);
+        self.stats
+            .skipped
+            .fetch_add(skipped_by_watermark, Ordering::Relaxed);
 
         if files.is_empty() {
             info!("No new files to process (all files are older than watermark)");
@@ -360,7 +372,8 @@ impl Processor {
         );
 
         // For Supplement mode: scan target directory for existing file hashes
-        let existing_hashes: HashSet<u64> = if config.processing_mode == ProcessingMode::Supplement {
+        let existing_hashes: HashSet<u64> = if config.processing_mode == ProcessingMode::Supplement
+        {
             info!("Scanning target directory for existing files...");
             self.scan_target_hashes()?
         } else {
@@ -380,7 +393,10 @@ impl Processor {
         // Wrap state in Arc<Mutex> for shared access
         let state = Arc::new(Mutex::new(std::mem::take(&mut self.state)));
         let stats = Arc::new(ProcessingStats::new());
-        stats.total_files.store(self.stats.total_files.load(Ordering::Relaxed), Ordering::Relaxed);
+        stats.total_files.store(
+            self.stats.total_files.load(Ordering::Relaxed),
+            Ordering::Relaxed,
+        );
 
         // Map to track hash -> destination for duplicate reporting
         let hash_to_dest: Arc<Mutex<HashMap<u64, PathBuf>>> = Arc::new(Mutex::new(HashMap::new()));
@@ -404,9 +420,14 @@ impl Processor {
                         let dest = {
                             let dest_map = hash_to_dest.lock().unwrap();
                             dest_map.get(hash).cloned()
-                        }.or_else(|| hash_to_best_file.get(hash).cloned());
+                        }
+                        .or_else(|| hash_to_best_file.get(hash).cloned());
 
-                        debug!(?file_path, ?dest, "Skipping duplicate file (inferior filename)");
+                        debug!(
+                            ?file_path,
+                            ?dest,
+                            "Skipping duplicate file (inferior filename)"
+                        );
                         stats.duplicates.fetch_add(1, Ordering::Relaxed);
                         return FileResult {
                             source: file_path.clone(),
@@ -437,22 +458,18 @@ impl Processor {
             .unwrap();
 
         // Update stats (add to existing counts to preserve watermark-filtered files count)
-        self.stats.processed.fetch_add(
-            stats.processed.load(Ordering::Relaxed),
-            Ordering::Relaxed,
-        );
-        self.stats.skipped.fetch_add(
-            stats.skipped.load(Ordering::Relaxed),
-            Ordering::Relaxed,
-        );
-        self.stats.duplicates.fetch_add(
-            stats.duplicates.load(Ordering::Relaxed),
-            Ordering::Relaxed,
-        );
-        self.stats.failed.fetch_add(
-            stats.failed.load(Ordering::Relaxed),
-            Ordering::Relaxed,
-        );
+        self.stats
+            .processed
+            .fetch_add(stats.processed.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.stats
+            .skipped
+            .fetch_add(stats.skipped.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.stats
+            .duplicates
+            .fetch_add(stats.duplicates.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.stats
+            .failed
+            .fetch_add(stats.failed.load(Ordering::Relaxed), Ordering::Relaxed);
 
         // Save state if incremental processing is enabled
         if self.config.processing_mode == ProcessingMode::Incremental && !self.config.dry_run {
@@ -487,12 +504,11 @@ impl Processor {
                 .filter_map(|e| e.ok())
             {
                 let path = entry.path();
-                if path.is_file() {
-                    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                        if self.config.is_supported(ext) {
-                            files.push(path.to_path_buf());
-                        }
-                    }
+                if path.is_file()
+                    && let Some(ext) = path.extension().and_then(|e| e.to_str())
+                    && self.config.is_supported(ext)
+                {
+                    files.push(path.to_path_buf());
                 }
             }
         }
@@ -526,11 +542,11 @@ impl Processor {
                 // Check if any component of the path matches the exclude pattern
                 if let Some(exclude_name) = exclude.file_name() {
                     for component in path.components() {
-                        if let std::path::Component::Normal(name) = component {
-                            if name == exclude_name {
-                                debug!(?path, ?exclude, "Excluding directory (folder name match)");
-                                return true;
-                            }
+                        if let std::path::Component::Normal(name) = component
+                            && name == exclude_name
+                        {
+                            debug!(?path, ?exclude, "Excluding directory (folder name match)");
+                            return true;
                         }
                     }
                 }
@@ -583,7 +599,9 @@ impl Processor {
 
         for result in results {
             // Only consider successfully processed files
-            if result.status != ProcessingStatus::Success && result.status != ProcessingStatus::DryRun {
+            if result.status != ProcessingStatus::Success
+                && result.status != ProcessingStatus::DryRun
+            {
                 continue;
             }
 
@@ -601,8 +619,8 @@ impl Processor {
                         .to_path_buf();
 
                     // Compute hash if needed
-                    let hash = compute_file_hash(dest, self.config.large_file_threshold)
-                        .unwrap_or(0);
+                    let hash =
+                        compute_file_hash(dest, self.config.large_file_threshold).unwrap_or(0);
 
                     newest = Some((relative_path, time_info.timestamp, hash));
                 }
@@ -614,9 +632,7 @@ impl Processor {
             match &mut self.watermark {
                 Some(wm) => {
                     wm.update_if_newer(path, timestamp, hash);
-                    wm.set_files_processed(
-                        self.stats.processed.load(Ordering::Relaxed)
-                    );
+                    wm.set_files_processed(self.stats.processed.load(Ordering::Relaxed));
                 }
                 None => {
                     let mut wm = IncrementalWatermark::new(
@@ -626,9 +642,7 @@ impl Processor {
                         self.config.classification,
                         self.config.month_format,
                     );
-                    wm.set_files_processed(
-                        self.stats.processed.load(Ordering::Relaxed)
-                    );
+                    wm.set_files_processed(self.stats.processed.load(Ordering::Relaxed));
                     self.watermark = Some(wm);
                 }
             }
@@ -642,9 +656,14 @@ impl Processor {
         Ok(())
     }
 
-    /// Get processing statistics
+    /// Get processing statistics reference
     pub fn stats(&self) -> &ProcessingStats {
         &self.stats
+    }
+
+    /// Get a clone of the internal stats Arc for shared access
+    pub fn stats_arc(&self) -> Arc<ProcessingStats> {
+        self.stats.clone()
     }
 }
 
@@ -662,20 +681,22 @@ fn process_single_file(
     let content_hash = file_hash_map.get(&path.to_path_buf()).and_then(|h| *h);
 
     // Supplement mode: skip if file hash already exists in target directory
-    if config.processing_mode == ProcessingMode::Supplement {
-        if let Some(hash) = content_hash {
-            if existing_hashes.contains(&hash) {
-                debug!(?path, "File already exists in target (Supplement mode), skipping");
-                stats.skipped.fetch_add(1, Ordering::Relaxed);
-                return FileResult {
-                    source: path.to_path_buf(),
-                    destination: None,
-                    time_info: None,
-                    status: ProcessingStatus::Skipped,
-                    error: None,
-                };
-            }
-        }
+    if config.processing_mode == ProcessingMode::Supplement
+        && let Some(hash) = content_hash
+        && existing_hashes.contains(&hash)
+    {
+        debug!(
+            ?path,
+            "File already exists in target (Supplement mode), skipping"
+        );
+        stats.skipped.fetch_add(1, Ordering::Relaxed);
+        return FileResult {
+            source: path.to_path_buf(),
+            destination: None,
+            time_info: None,
+            status: ProcessingStatus::Skipped,
+            error: None,
+        };
     }
 
     // Check if file needs processing (incremental mode)
@@ -718,20 +739,20 @@ fn process_single_file(
     };
 
     // Check for duplicates in persisted state (for incremental processing)
-    if let Some(hash) = content_hash {
-        if config.processing_mode == ProcessingMode::Incremental {
-            let state_guard = state.lock().unwrap();
-            if let Some(existing) = state_guard.has_content_hash(hash) {
-                debug!(?path, ?existing, "Duplicate file detected (from state)");
-                stats.duplicates.fetch_add(1, Ordering::Relaxed);
-                return FileResult {
-                    source: path.to_path_buf(),
-                    destination: Some(existing.clone()),
-                    time_info: Some(time_info),
-                    status: ProcessingStatus::Duplicate,
-                    error: None,
-                };
-            }
+    if let Some(hash) = content_hash
+        && config.processing_mode == ProcessingMode::Incremental
+    {
+        let state_guard = state.lock().unwrap();
+        if let Some(existing) = state_guard.has_content_hash(hash) {
+            debug!(?path, ?existing, "Duplicate file detected (from state)");
+            stats.duplicates.fetch_add(1, Ordering::Relaxed);
+            return FileResult {
+                source: path.to_path_buf(),
+                destination: Some(existing.clone()),
+                time_info: Some(time_info),
+                status: ProcessingStatus::Duplicate,
+                error: None,
+            };
         }
     }
 
@@ -842,7 +863,7 @@ fn process_single_file(
                                 error: Some(e.to_string()),
                             };
                         }
-                    }
+                    },
                 }
             }
         } else {
@@ -862,7 +883,7 @@ fn process_single_file(
                             error: Some(e.to_string()),
                         };
                     }
-                }
+                },
             }
         }
     } else {
@@ -915,18 +936,16 @@ fn process_single_file(
     }
 
     // Update state
-    if config.processing_mode == ProcessingMode::Incremental {
-        if let (Ok(metadata_hash), Some(content_hash)) =
-            (compute_metadata_hash(path), content_hash)
-        {
-            let mut state_guard = state.lock().unwrap();
-            state_guard.record_processed(
-                path.to_path_buf(),
-                dest_path.clone(),
-                content_hash,
-                metadata_hash,
-            );
-        }
+    if config.processing_mode == ProcessingMode::Incremental
+        && let (Ok(metadata_hash), Some(content_hash)) = (compute_metadata_hash(path), content_hash)
+    {
+        let mut state_guard = state.lock().unwrap();
+        state_guard.record_processed(
+            path.to_path_buf(),
+            dest_path.clone(),
+            content_hash,
+            metadata_hash,
+        );
     }
 
     info!(
@@ -967,36 +986,33 @@ fn build_base_destination_path(
         ClassificationRule::Year => {
             dest.push(format!("{}", timestamp.year()));
         }
-        ClassificationRule::YearMonth => {
-            match config.month_format {
-                MonthFormat::Nested => {
-                    dest.push(format!("{}", timestamp.year()));
-                    dest.push(format!("{:02}", timestamp.month()));
-                }
-                MonthFormat::Combined => {
-                    dest.push(format!("{}-{:02}", timestamp.year(), timestamp.month()));
-                }
+        ClassificationRule::YearMonth => match config.month_format {
+            MonthFormat::Nested => {
+                dest.push(format!("{}", timestamp.year()));
+                dest.push(format!("{:02}", timestamp.month()));
             }
-        }
+            MonthFormat::Combined => {
+                dest.push(format!("{}-{:02}", timestamp.year(), timestamp.month()));
+            }
+        },
     }
 
     // File type classification (after time classification)
-    if config.classify_by_type {
-        if let Some(ext) = source.extension().and_then(|e| e.to_str()) {
-            if let Some(file_type) = config.get_file_type(ext) {
-                match file_type {
-                    FileType::Photos => {
-                        dest.push(file_type.folder_name());
-                    }
-                    FileType::Raw => {
-                        // RAW files are nested under Photos/Raw
-                        dest.push(FileType::Photos.folder_name());
-                        dest.push(file_type.folder_name());
-                    }
-                    FileType::Videos => {
-                        dest.push(file_type.folder_name());
-                    }
-                }
+    if config.classify_by_type
+        && let Some(ext) = source.extension().and_then(|e| e.to_str())
+        && let Some(file_type) = config.get_file_type(ext)
+    {
+        match file_type {
+            FileType::Photos => {
+                dest.push(file_type.folder_name());
+            }
+            FileType::Raw => {
+                // RAW files are nested under Photos/Raw
+                dest.push(FileType::Photos.folder_name());
+                dest.push(file_type.folder_name());
+            }
+            FileType::Videos => {
+                dest.push(file_type.folder_name());
             }
         }
     }
@@ -1072,10 +1088,10 @@ fn perform_file_operation(source: &Path, dest: &Path, config: &Config) -> Result
     }
 
     // Preserve modification time
-    if let Ok(metadata) = fs::metadata(source) {
-        if let Ok(mtime) = metadata.modified() {
-            let _ = filetime::set_file_mtime(dest, filetime::FileTime::from_system_time(mtime));
-        }
+    if let Ok(metadata) = fs::metadata(source)
+        && let Ok(mtime) = metadata.modified()
+    {
+        let _ = filetime::set_file_mtime(dest, filetime::FileTime::from_system_time(mtime));
     }
 
     Ok(())
@@ -1139,11 +1155,36 @@ mod tests {
         let score_paren = filename_priority_score(copy_paren);
 
         // Clean filename (shortest) should have the lowest score
-        assert!(score_clean < score_copy_cn, "Clean ({}) < Chinese copy ({})", score_clean, score_copy_cn);
-        assert!(score_clean < score_suffix1, "Clean ({}) < _1 suffix ({})", score_clean, score_suffix1);
-        assert!(score_clean < score_suffix2, "Clean ({}) < _2 suffix ({})", score_clean, score_suffix2);
-        assert!(score_clean < score_space, "Clean ({}) < space suffix ({})", score_clean, score_space);
-        assert!(score_clean < score_paren, "Clean ({}) < parentheses ({})", score_clean, score_paren);
+        assert!(
+            score_clean < score_copy_cn,
+            "Clean ({}) < Chinese copy ({})",
+            score_clean,
+            score_copy_cn
+        );
+        assert!(
+            score_clean < score_suffix1,
+            "Clean ({}) < _1 suffix ({})",
+            score_clean,
+            score_suffix1
+        );
+        assert!(
+            score_clean < score_suffix2,
+            "Clean ({}) < _2 suffix ({})",
+            score_clean,
+            score_suffix2
+        );
+        assert!(
+            score_clean < score_space,
+            "Clean ({}) < space suffix ({})",
+            score_clean,
+            score_space
+        );
+        assert!(
+            score_clean < score_paren,
+            "Clean ({}) < parentheses ({})",
+            score_clean,
+            score_paren
+        );
     }
 
     #[test]

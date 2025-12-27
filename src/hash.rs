@@ -33,10 +33,11 @@ pub fn compute_file_hash(path: &Path, large_file_threshold: u64) -> Result<u64> 
 fn compute_full_hash(path: &Path) -> Result<u64> {
     let mut file = File::open(path)?;
     let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer).map_err(|e| Error::HashComputation {
-        path: path.to_path_buf(),
-        message: format!("Failed to read file: {}", e),
-    })?;
+    file.read_to_end(&mut buffer)
+        .map_err(|e| Error::HashComputation {
+            path: path.to_path_buf(),
+            message: format!("Failed to read file: {}", e),
+        })?;
 
     let hash = xxh3_64(&buffer);
     trace!(?path, hash, "Computed full file hash");
@@ -61,39 +62,44 @@ fn compute_sampled_hash(path: &Path, file_size: u64) -> Result<u64> {
     // Read head sample
     let head_size = std::cmp::min(SAMPLE_SIZE, file_size);
     let mut head_buffer = vec![0u8; head_size as usize];
-    file.read_exact(&mut head_buffer).map_err(|e| Error::HashComputation {
-        path: path.to_path_buf(),
-        message: format!("Failed to read file head: {}", e),
-    })?;
+    file.read_exact(&mut head_buffer)
+        .map_err(|e| Error::HashComputation {
+            path: path.to_path_buf(),
+            message: format!("Failed to read file head: {}", e),
+        })?;
     hasher_data.extend_from_slice(&head_buffer);
 
     // Read middle sample (if file is large enough)
     if file_size > SAMPLE_SIZE * 2 {
         let middle_start = (file_size - SAMPLE_SIZE) / 2;
-        file.seek(SeekFrom::Start(middle_start)).map_err(|e| Error::HashComputation {
-            path: path.to_path_buf(),
-            message: format!("Failed to seek to middle: {}", e),
-        })?;
+        file.seek(SeekFrom::Start(middle_start))
+            .map_err(|e| Error::HashComputation {
+                path: path.to_path_buf(),
+                message: format!("Failed to seek to middle: {}", e),
+            })?;
         let mut middle_buffer = vec![0u8; SAMPLE_SIZE as usize];
-        file.read_exact(&mut middle_buffer).map_err(|e| Error::HashComputation {
-            path: path.to_path_buf(),
-            message: format!("Failed to read file middle: {}", e),
-        })?;
+        file.read_exact(&mut middle_buffer)
+            .map_err(|e| Error::HashComputation {
+                path: path.to_path_buf(),
+                message: format!("Failed to read file middle: {}", e),
+            })?;
         hasher_data.extend_from_slice(&middle_buffer);
     }
 
     // Read tail sample (if file is large enough)
     if file_size > SAMPLE_SIZE {
         let tail_start = file_size - SAMPLE_SIZE;
-        file.seek(SeekFrom::Start(tail_start)).map_err(|e| Error::HashComputation {
-            path: path.to_path_buf(),
-            message: format!("Failed to seek to tail: {}", e),
-        })?;
+        file.seek(SeekFrom::Start(tail_start))
+            .map_err(|e| Error::HashComputation {
+                path: path.to_path_buf(),
+                message: format!("Failed to seek to tail: {}", e),
+            })?;
         let mut tail_buffer = vec![0u8; SAMPLE_SIZE as usize];
-        file.read_exact(&mut tail_buffer).map_err(|e| Error::HashComputation {
-            path: path.to_path_buf(),
-            message: format!("Failed to read file tail: {}", e),
-        })?;
+        file.read_exact(&mut tail_buffer)
+            .map_err(|e| Error::HashComputation {
+                path: path.to_path_buf(),
+                message: format!("Failed to read file tail: {}", e),
+            })?;
         hasher_data.extend_from_slice(&tail_buffer);
     }
 
@@ -112,11 +118,11 @@ pub fn compute_metadata_hash(path: &Path) -> Result<u64> {
     data.extend_from_slice(&metadata.len().to_le_bytes());
 
     // Include modification time if available
-    if let Ok(modified) = metadata.modified() {
-        if let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH) {
-            data.extend_from_slice(&duration.as_secs().to_le_bytes());
-            data.extend_from_slice(&duration.subsec_nanos().to_le_bytes());
-        }
+    if let Ok(modified) = metadata.modified()
+        && let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH)
+    {
+        data.extend_from_slice(&duration.as_secs().to_le_bytes());
+        data.extend_from_slice(&duration.subsec_nanos().to_le_bytes());
     }
 
     Ok(xxh3_64(&data))

@@ -7,17 +7,135 @@
 use anyhow::Result;
 use chrono::Local;
 use clap::Parser;
-use console::style;
-use gallery_sorter::{
-    display_summary, init_locale, should_run_interactive, Cli, Config, InteractiveResult, InteractiveWizard, Processor,
-};
-use std::path::PathBuf;
-use tracing::{error, info, Level};
+use gallery_sorter::{Cli, Config, Processor, TuiApp, init_locale, should_run_interactive};
+use std::path::{Path, PathBuf};
+use tracing::{Level, error, info};
 use tracing_appender::non_blocking::WorkerGuard;
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 // Initialize i18n for this binary
 rust_i18n::i18n!("locales", fallback = "en");
+
+// CLI Output Module
+mod cli_output {
+    //! CLI 输出美化模块
+    //!
+    //! 为命令行输出提供统一的颜色和格式样式。
+
+    use crossterm::{
+        ExecutableCommand,
+        style::{Color, Print, Stylize, style},
+    };
+    use std::io::stdout;
+
+    /// CLI 主题颜色
+    pub struct CliTheme;
+
+    impl CliTheme {
+        /// 成功颜色（绿色）
+        pub const SUCCESS: Color = Color::Green;
+        /// 警告颜色（黄色）
+        pub const WARNING: Color = Color::Yellow;
+        /// 错误颜色（红色）
+        pub const ERROR: Color = Color::Red;
+        /// 提示颜色（暗灰色）
+        pub const HINT: Color = Color::DarkGrey;
+        /// 强调颜色（青色）
+        pub const ACCENT: Color = Color::Cyan;
+    }
+
+    /// 打印分隔线
+    pub fn print_separator() {
+        let _ = stdout().execute(Print(&format!("{}\n", "─".repeat(60))));
+    }
+
+    /// 打印居中的标题
+    pub fn print_title(title: &str) {
+        let width = 60;
+        let padding = (width - title.len()) / 2;
+        let left_pad = " ".repeat(padding.saturating_sub(1));
+
+        let _ = stdout().execute(Print(&format!(
+            "{}{} {}{}\n",
+            left_pad,
+            "╔".bold().stylize(),
+            title.bold().stylize(),
+            "╗".bold().stylize(),
+        )));
+        let _ = stdout().execute(Print("\n"));
+    }
+
+    /// 打印警告消息
+    pub fn print_warning(msg: &str) {
+        let _ = stdout().execute(Print(style("⚠ ").with(CliTheme::WARNING).bold()));
+        let _ = stdout().execute(Print(format!("{}\n", msg)));
+    }
+
+    /// 打印错误消息
+    pub fn print_error(msg: &str) {
+        let _ = stdout().execute(Print(style("✗ ").with(CliTheme::ERROR).bold()));
+        let _ = stdout().execute(Print(format!("{}\n", msg)));
+    }
+
+    /// 打印提示消息
+    pub fn print_hint(msg: &str) {
+        let _ = stdout().execute(Print(style("→ ").with(CliTheme::HINT)));
+        let _ = stdout().execute(Print(format!("{}\n", msg)));
+    }
+
+    /// 打印键值对
+    pub fn print_key_value(key: &str, value: &str, value_color: Option<Color>) {
+        let key_styled = style(key).with(CliTheme::HINT);
+        let value_styled = match value_color {
+            Some(color) => style(value).with(color),
+            None => style(value).bold(),
+        };
+        let _ = stdout().execute(Print("  "));
+        let _ = stdout().execute(Print(key_styled));
+        let _ = stdout().execute(Print(": "));
+        let _ = stdout().execute(Print(value_styled));
+        let _ = stdout().execute(Print("\n"));
+    }
+
+    /// 打印统计项
+    pub fn print_stat(key: &str, value: &str, color: Color) {
+        let key_styled = style(key).with(CliTheme::HINT);
+        let value_styled = style(value).with(color).bold();
+        let _ = stdout().execute(Print("  "));
+        let _ = stdout().execute(Print(key_styled));
+        let _ = stdout().execute(Print(": "));
+        let _ = stdout().execute(Print(value_styled));
+        let _ = stdout().execute(Print("\n"));
+    }
+
+    /// 打印处理结果行
+    pub fn print_result(status_icon: &str, status_color: Color, source: &str, dest_or_msg: &str) {
+        let icon_styled = style(status_icon).with(status_color).bold();
+        let source_styled = style(source).italic();
+        let msg_styled = style(dest_or_msg).with(CliTheme::HINT);
+
+        let _ = stdout().execute(Print("  "));
+        let _ = stdout().execute(Print(icon_styled));
+        let _ = stdout().execute(Print(" "));
+        let _ = stdout().execute(Print(source_styled));
+        let _ = stdout().execute(Print(" "));
+        let _ = stdout().execute(Print(msg_styled));
+        let _ = stdout().execute(Print("\n"));
+    }
+
+    /// 打印日志文件路径
+    pub fn print_log_path(path: &str) {
+        let _ = stdout().execute(Print("\n"));
+        let _ = stdout().execute(Print(style("  📁 ").with(CliTheme::ACCENT)));
+        let _ = stdout().execute(Print(style("日志文件: ").with(CliTheme::HINT)));
+        let _ = stdout().execute(Print(format!("{}\n", path)));
+    }
+
+    /// 打印空行
+    pub fn print_blank() {
+        let _ = stdout().execute(Print("\n"));
+    }
+}
 
 /// Convenience macro for translation
 macro_rules! t {
@@ -42,75 +160,40 @@ fn main() -> Result<()> {
     run_cli_mode()
 }
 
-/// Run in interactive mode with wizard and progress display
+/// Run in interactive mode with Ratatui TUI
 fn run_interactive_mode() -> Result<()> {
-    let wizard = InteractiveWizard::new();
-
-    // Run configuration wizard
-    let InteractiveResult { config, config_name } = match wizard.run()? {
-        Some(result) => result,
-        None => return Ok(()), // User cancelled
-    };
-
-    // Get the executable directory for Log directory
+    // Get executable directory first for log path
     let exe_dir = get_executable_dir()?;
     let log_dir = exe_dir.join("Log");
     let timestamp = Local::now().format("%Y%m%d_%H%M%S");
+    let log_path = log_dir.join(format!("Interactive_{}.log", timestamp));
 
-    // Determine log path based on whether config was used
-    let log_path = if let Some(ref name) = config_name {
-        // Config-based run: Log/ConfigName/ConfigName_YYYYMMDD_HHMMSS.log
-        let config_log_dir = log_dir.join(name);
-        std::fs::create_dir_all(&config_log_dir)?;
-        config_log_dir.join(format!("{}_{}.log", name, timestamp))
-    } else {
-        // Direct input run: Log/Interactive_YYYYMMDD_HHMMSS.log
-        std::fs::create_dir_all(&log_dir)?;
-        log_dir.join(format!("Interactive_{}.log", timestamp))
-    };
-
-    // Setup file-only logging (no console output for interactive mode)
+    // Setup file-only logging before TUI starts
     let _guard = setup_file_only_logging(&log_path)?;
 
     info!(
         version = env!("CARGO_PKG_VERSION"),
         "Gallery Sorter starting in interactive mode"
     );
-    info!(?config, "Configuration loaded");
 
-    // Validate configuration
-    validate_config(&config)?;
+    let mut wizard = TuiApp::new()?;
+    wizard.set_log_path(log_path.clone());
 
-    let dry_run = config.dry_run;
-
-    // Create processor
-    let mut processor = Processor::new(config)?;
-
-    // Run with progress display
-    println!("\n{} {}\n", style("*").cyan(), t!("starting_processing"));
-
-    match processor.run() {
-        Ok(results) => {
-            let stats = processor.stats();
-
-            // Display beautiful summary
-            display_summary(stats, &results, dry_run);
-
-            info!(log_file = %log_path.display(), "Processing complete");
-            println!("\n  {} {} {}\n",
-                style(">").dim(),
-                t!("log_saved_to"),
-                style(log_path.display()).dim()
-            );
-
-            Ok(())
+    // Run configuration wizard (processing happens within TUI)
+    match wizard.run()? {
+        Some(_) => {
+            // Config was completed and processing ran within TUI
+            info!(log_file = %log_path.display(), "Interactive session complete");
         }
-        Err(e) => {
-            error!(error = %e, "Processing failed");
-            eprintln!("\n{} Error: {}\n", style("✗").red(), style(&e).red());
-            std::process::exit(1);
+        None => {
+            // User cancelled
+            info!("User cancelled interactive mode");
         }
-    }
+    };
+
+    // 日志路径已在 TUI 摘要屏幕显示
+
+    Ok(())
 }
 
 /// Run in standard CLI mode
@@ -151,80 +234,142 @@ fn run_cli_mode() -> Result<()> {
 
     match processor.run() {
         Ok(results) => {
-            // Print summary
-            println!("\n{}", "=".repeat(60));
-            println!("{}", t!("cli_processing_complete"));
-            println!("{}", "=".repeat(60));
-            println!("{}", processor.stats().summary());
+            use cli_output::*;
+
+            // Store translations to avoid temporary value issues
+            let stat_processed = t!("stat_processed");
+            let stat_skipped = t!("stat_skipped");
+            let stat_duplicates = t!("stat_duplicates");
+            let stat_failed = t!("stat_failed");
+
+            // Print summary header
+            print_separator();
+            print_title(&t!("cli_processing_complete"));
+            print_separator();
+
+            // Get stats
+            let stats = processor.stats();
+            let processed = stats.processed.load(std::sync::atomic::Ordering::Relaxed);
+            let skipped = stats.skipped.load(std::sync::atomic::Ordering::Relaxed);
+            let duplicates = stats.duplicates.load(std::sync::atomic::Ordering::Relaxed);
+            let failed_count = stats.failed.load(std::sync::atomic::Ordering::Relaxed);
+
+            // Print stats with colors
+            print_blank();
+            print_stat(&stat_processed, &processed.to_string(), CliTheme::SUCCESS);
+            print_stat(&stat_skipped, &skipped.to_string(), CliTheme::WARNING);
+            print_stat(&stat_duplicates, &duplicates.to_string(), CliTheme::ACCENT);
+            print_stat(&stat_failed, &failed_count.to_string(), CliTheme::ERROR);
+            print_blank();
+
+            // Store translations for results
+            let already_processed = t!("already_processed");
+            let duplicate_of = t!("duplicate_of");
+            let unknown_error = t!("unknown_error");
 
             // Print detailed results if verbose
             if cli.verbose {
-                println!("\n{}:", t!("cli_detailed_results"));
+                print_separator();
+                print_hint(&t!("cli_detailed_results"));
+                print_blank();
+
                 for result in &results {
                     match result.status {
                         gallery_sorter::process::ProcessingStatus::Success => {
-                            println!(
-                                "  {} {} -> {}",
-                                t!("status_ok"),
-                                result.source.display(),
-                                result.destination.as_ref().map(|p| p.display().to_string()).unwrap_or_default()
+                            let dest = result
+                                .destination
+                                .as_ref()
+                                .map(|p| p.display().to_string())
+                                .unwrap_or_default();
+                            print_result(
+                                "✓",
+                                CliTheme::SUCCESS,
+                                &result.source.display().to_string(),
+                                &format!("→ {}", dest),
                             );
                         }
                         gallery_sorter::process::ProcessingStatus::Skipped => {
-                            println!("  {} {} {}", t!("status_skip"), result.source.display(), t!("already_processed"));
+                            print_result(
+                                "⊘",
+                                CliTheme::WARNING,
+                                &result.source.display().to_string(),
+                                &already_processed,
+                            );
                         }
                         gallery_sorter::process::ProcessingStatus::Duplicate => {
-                            println!(
-                                "  {} {} {} {})",
-                                t!("status_dup"),
-                                result.source.display(),
-                                t!("duplicate_of"),
-                                result.destination.as_ref().map(|p| p.display().to_string()).unwrap_or_default()
+                            let dest = result
+                                .destination
+                                .as_ref()
+                                .map(|p| p.display().to_string())
+                                .unwrap_or_default();
+                            print_result(
+                                "≡",
+                                CliTheme::ACCENT,
+                                &result.source.display().to_string(),
+                                &format!("{}: {}", duplicate_of, dest),
                             );
                         }
                         gallery_sorter::process::ProcessingStatus::Failed => {
-                            println!(
-                                "  {} {} - {}",
-                                t!("status_fail"),
-                                result.source.display(),
-                                result.error.as_deref().unwrap_or(&t!("unknown_error"))
+                            let error_msg = result.error.as_deref().unwrap_or(&unknown_error);
+                            print_result(
+                                "✗",
+                                CliTheme::ERROR,
+                                &result.source.display().to_string(),
+                                error_msg,
                             );
                         }
                         gallery_sorter::process::ProcessingStatus::DryRun => {
-                            println!(
-                                "  {} {} -> {}",
-                                t!("status_dry"),
-                                result.source.display(),
-                                result.destination.as_ref().map(|p| p.display().to_string()).unwrap_or_default()
+                            let dest = result
+                                .destination
+                                .as_ref()
+                                .map(|p| p.display().to_string())
+                                .unwrap_or_default();
+                            print_result(
+                                "~",
+                                CliTheme::ACCENT,
+                                &result.source.display().to_string(),
+                                &format!("→ {}", dest),
                             );
                         }
                     }
                 }
             }
 
-            // Report failed files
-            let failed: Vec<_> = results
+            // Report failed files summary
+            let failed_items: Vec<_> = results
                 .iter()
                 .filter(|r| r.status == gallery_sorter::process::ProcessingStatus::Failed)
                 .collect();
 
-            if !failed.is_empty() {
-                eprintln!("\n{}:", t!("cli_failed_files"));
-                for result in &failed {
-                    eprintln!(
-                        "  {} - {}",
-                        result.source.display(),
-                        result.error.as_deref().unwrap_or(&t!("unknown_error"))
+            if !failed_items.is_empty() {
+                print_separator();
+                print_error(&format!(
+                    "{} {} {}",
+                    t!("cli_failed_files"),
+                    failed_items.len(),
+                    t!("files")
+                ));
+                print_blank();
+                for result in &failed_items {
+                    let error_msg = result.error.as_deref().unwrap_or(&unknown_error);
+                    print_key_value(
+                        &result.source.display().to_string(),
+                        error_msg,
+                        Some(CliTheme::ERROR),
                     );
                 }
             }
 
             if cli.dry_run {
-                println!("\n{}", t!("cli_dry_run_notice"));
+                print_separator();
+                print_warning(&t!("cli_dry_run_notice"));
             }
 
+            // Print log file path
+            print_separator();
+            print_log_path(&log_path.display().to_string());
+
             info!(log_file = %log_path.display(), "Processing complete. Log saved to");
-            println!("\n{} {}", t!("log_saved_to"), log_path.display());
 
             Ok(())
         }
@@ -246,50 +391,39 @@ fn get_executable_dir() -> Result<PathBuf> {
 }
 
 /// Determine the log file path based on config file or timestamp
-fn get_log_path(exe_dir: &PathBuf, cli: &Cli) -> PathBuf {
+fn get_log_path(exe_dir: &Path, cli: &Cli) -> PathBuf {
     let log_dir = exe_dir.join("Log");
     let timestamp = Local::now().format("%Y%m%d_%H%M%S");
 
     if let Some(config_name) = cli.config_name() {
-        // Create a subdirectory with the config name
-        // Log path: Log/ConfigName/ConfigName_YYYYMMDD_HHMMSS.log
         let config_log_dir = log_dir.join(&config_name);
         let log_filename = format!("{}_{}.log", config_name, timestamp);
         config_log_dir.join(log_filename)
     } else {
-        // Use timestamp for CLI run (no config)
-        // Log path: Log/CLIRun_YYYYMMDD_HHMMSS.log
         let log_filename = format!("CLIRun_{}.log", timestamp);
         log_dir.join(log_filename)
     }
 }
 
 /// Resolve config path - supports shorthand syntax
-/// e.g., "Config1" -> "Config/Config1.toml"
-fn resolve_config_path(exe_dir: &PathBuf, config_path: &PathBuf) -> PathBuf {
-    // If the path exists as-is, use it directly
+fn resolve_config_path(exe_dir: &Path, config_path: &Path) -> PathBuf {
     if config_path.exists() {
-        return config_path.clone();
+        return config_path.to_path_buf();
     }
 
-    // Try adding .toml extension if not present
     let with_extension = if config_path.extension().is_none() {
         config_path.with_extension("toml")
     } else {
-        config_path.clone()
+        config_path.to_path_buf()
     };
 
     if with_extension.exists() {
         return with_extension;
     }
 
-    // Try in the Config directory relative to executable
     let config_dir = exe_dir.join("Config");
-    let filename = config_path
-        .file_name()
-        .unwrap_or(config_path.as_os_str());
+    let filename = config_path.file_name().unwrap_or(config_path.as_os_str());
 
-    // Try with .toml extension
     let mut in_config_dir = config_dir.join(filename);
     if in_config_dir.extension().is_none() {
         in_config_dir = in_config_dir.with_extension("toml");
@@ -299,26 +433,20 @@ fn resolve_config_path(exe_dir: &PathBuf, config_path: &PathBuf) -> PathBuf {
         return in_config_dir;
     }
 
-    // Return original path (will fail with proper error message later)
-    config_path.clone()
+    config_path.to_path_buf()
 }
 
 /// Load configuration from file or CLI arguments
-fn load_config(cli: &Cli, exe_dir: &PathBuf) -> Result<Config> {
+fn load_config(cli: &Cli, exe_dir: &Path) -> Result<Config> {
     let config = if let Some(ref config_path) = cli.config {
-        // Resolve config path (support shorthand syntax)
         let resolved_path = resolve_config_path(exe_dir, config_path);
-        // Load from config file
         info!(config_file = %resolved_path.display(), "Loading configuration from file");
         let file_config = Config::load_from_file(&resolved_path)?;
-        // Merge with CLI arguments (CLI takes precedence)
         cli.merge_with_config(file_config)
     } else {
-        // Use CLI arguments only
         cli.to_config()
     };
 
-    // Validate that we have input directories
     if config.input_dirs.is_empty() {
         anyhow::bail!("{}", t!("cli_no_input_dirs_error"));
     }
@@ -327,7 +455,7 @@ fn load_config(cli: &Cli, exe_dir: &PathBuf) -> Result<Config> {
 }
 
 /// Setup logging for CLI mode (file + console)
-fn setup_logging(cli: &Cli, log_path: &PathBuf) -> Result<Option<WorkerGuard>> {
+fn setup_logging(cli: &Cli, log_path: &Path) -> Result<Option<WorkerGuard>> {
     let level = if cli.verbose {
         Level::DEBUG
     } else {
@@ -338,12 +466,10 @@ fn setup_logging(cli: &Cli, log_path: &PathBuf) -> Result<Option<WorkerGuard>> {
         .with_default_directive(level.into())
         .from_env_lossy();
 
-    // Create Log directory if needed
     if let Some(parent) = log_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
 
-    // Open log file
     let file = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
@@ -356,7 +482,12 @@ fn setup_logging(cli: &Cli, log_path: &PathBuf) -> Result<Option<WorkerGuard>> {
 
     if cli.json_log {
         subscriber
-            .with(fmt::layer().json().with_ansi(false).with_writer(non_blocking))
+            .with(
+                fmt::layer()
+                    .json()
+                    .with_ansi(false)
+                    .with_writer(non_blocking),
+            )
             .with(fmt::layer().with_writer(std::io::stderr))
             .init();
     } else {
@@ -370,17 +501,15 @@ fn setup_logging(cli: &Cli, log_path: &PathBuf) -> Result<Option<WorkerGuard>> {
 }
 
 /// Setup logging for interactive mode (file only, no console)
-fn setup_file_only_logging(log_path: &PathBuf) -> Result<Option<WorkerGuard>> {
+fn setup_file_only_logging(log_path: &Path) -> Result<Option<WorkerGuard>> {
     let env_filter = EnvFilter::builder()
         .with_default_directive(Level::INFO.into())
         .from_env_lossy();
 
-    // Create Log directory if needed
     if let Some(parent) = log_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
 
-    // Open log file
     let file = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
@@ -399,14 +528,12 @@ fn setup_file_only_logging(log_path: &PathBuf) -> Result<Option<WorkerGuard>> {
 
 /// Validate configuration before processing
 fn validate_config(config: &gallery_sorter::Config) -> Result<()> {
-    // Check input directories exist
     for input_dir in &config.input_dirs {
         if !input_dir.exists() {
             eprintln!("{} {}", t!("cli_input_dir_not_exist"), input_dir.display());
         }
     }
 
-    // Check output directory is not inside input directories
     for input_dir in &config.input_dirs {
         if config.output_dir.starts_with(input_dir) {
             anyhow::bail!(
