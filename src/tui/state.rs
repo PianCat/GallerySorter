@@ -261,14 +261,14 @@ impl ConfigStep {
                 if classification == ClassificationRule::YearMonth {
                     ConfigStep::MonthFormat
                 } else {
-                    ConfigStep::FileOperation
+                    ConfigStep::ClassifyByType
                 }
             }
-            ConfigStep::MonthFormat => ConfigStep::FileOperation,
-            ConfigStep::FileOperation => ConfigStep::Deduplication,
-            ConfigStep::Deduplication => ConfigStep::DryRun,
-            ConfigStep::DryRun => ConfigStep::ClassifyByType,
-            ConfigStep::ClassifyByType => ConfigStep::Summary,
+            ConfigStep::MonthFormat => ConfigStep::ClassifyByType,
+            ConfigStep::ClassifyByType => ConfigStep::Deduplication,
+            ConfigStep::Deduplication => ConfigStep::FileOperation,
+            ConfigStep::FileOperation => ConfigStep::DryRun,
+            ConfigStep::DryRun => ConfigStep::Summary,
             ConfigStep::Summary => ConfigStep::ConfirmRun,
             ConfigStep::ConfirmRun => ConfigStep::ConfirmRun,
         }
