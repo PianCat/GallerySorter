@@ -7,7 +7,7 @@ pub mod windows;
 #[cfg(unix)]
 pub fn has_admin_privileges() -> bool {
     // On Unix, check if EUID is 0 (root)
-    nix::unistd::geteuid() == nix::unistd::Uid::from_raw(0)
+    nix::unistd::geteuid().is_root()
 }
 
 /// Check if the current process has administrator privileges.
