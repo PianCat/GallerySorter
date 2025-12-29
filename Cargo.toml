@@ -9,9 +9,25 @@ repository = "https://github.com/PianCat/GallerySorter"
 keywords = ["photo", "gallery", "organizer", "exif", "media"]
 categories = ["command-line-utilities", "multimedia"]
 
+[package.metadata.wix]
+# WiX installer configuration (optional)
+# binary = "gallery-sorter"
+
 [dependencies]
 # CLI argument parsing
 clap = { version = "4.5", features = ["derive", "env"] }
+
+# Windows API bindings
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = [
+    "winuser",
+    "shellapi",
+    "securitybaseapi",
+    "handleapi",
+] }
+
+# Unix-specific functionality (for privilege checking)
+nix = "0.30"
 
 # Parallel processing
 rayon = "1.11"

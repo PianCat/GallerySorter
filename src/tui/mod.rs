@@ -1,6 +1,6 @@
-//! Ratatui Terminal UI模块
+//! Ratatui Terminal UI module
 //!
-//! 提供基于ratatui的现代终端用户界面。
+//! Provides modern terminal user interface based on ratatui.
 
 pub mod app;
 pub mod display;
@@ -9,7 +9,7 @@ pub mod state;
 pub mod theme;
 pub mod ui;
 
-// 重新导出主要类型
+// Re-export main types
 pub use app::TuiApp;
 pub use display::{display_summary, should_run_interactive};
 pub use event::{EventPoll, TuiEvent};

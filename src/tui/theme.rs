@@ -1,36 +1,36 @@
-//! 主题模块
+//! Theme module
 //!
-//! 提供统一的主题定义，使用Stylize trait实现简洁的样式设置。
+//! Provides unified theme definition, using Stylize trait for concise style settings.
 
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Line;
 
-/// 主题颜色配置
+/// Theme color configuration
 #[derive(Debug, Clone, Copy)]
 pub struct Theme {
-    /// 背景色（深色主题）
+    /// Background color (dark theme)
     pub bg: Color,
-    /// 前景色（白色）
+    /// Foreground color (white)
     pub fg: Color,
-    /// 强调色（青色）
+    /// Accent color (cyan)
     pub accent: Color,
-    /// 选中项背景色
+    /// Selected item background color
     pub selected_bg: Color,
-    /// 选中项前景色
+    /// Selected item foreground color
     pub selected_fg: Color,
-    /// 成功色（绿色）
+    /// Success color (green)
     pub success: Color,
-    /// 警告色（黄色）
+    /// Warning color (yellow)
     pub warning: Color,
-    /// 错误色（红色）
+    /// Error color (red)
     pub error: Color,
-    /// 提示/次要文字色（灰色）
+    /// Hint/secondary text color (gray)
     pub hint: Color,
-    /// 边框色
+    /// Border color
     pub border: Color,
-    /// 进度条颜色
+    /// Progress bar color
     pub progress: Color,
-    /// 标题颜色
+    /// Title color
     pub title: Color,
 }
 
@@ -54,17 +54,17 @@ impl Default for Theme {
 }
 
 impl Theme {
-    /// 创建新主题
+    /// Create new theme
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// 普通文本样式
+    /// Normal text style
     pub fn normal(&self) -> Style {
         Style::new().fg(self.fg).bg(self.bg)
     }
 
-    /// 标题样式 - 使用Stylize trait
+    /// Title style - using Stylize trait
     pub fn title(&self) -> Style {
         Style::new()
             .fg(self.title)
@@ -72,7 +72,7 @@ impl Theme {
             .add_modifier(Modifier::BOLD)
     }
 
-    /// 选中项样式
+    /// Selected item style
     pub fn selected(&self) -> Style {
         Style::new()
             .fg(self.selected_fg)
@@ -80,48 +80,48 @@ impl Theme {
             .add_modifier(Modifier::BOLD)
     }
 
-    /// 边框样式
+    /// Border style
     pub fn border(&self) -> Style {
         Style::new().fg(self.border).bg(self.bg)
     }
 
-    /// 提示文本样式
+    /// Hint text style
     pub fn hint(&self) -> Style {
         Style::new().fg(self.hint).bg(self.bg)
     }
 
-    /// 成功样式
+    /// Success style
     pub fn success(&self) -> Style {
         Style::new().fg(self.success).bg(self.bg)
     }
 
-    /// 警告样式
+    /// Warning style
     pub fn warning(&self) -> Style {
         Style::new().fg(self.warning).bg(self.bg)
     }
 
-    /// 错误样式
+    /// Error style
     pub fn error(&self) -> Style {
         Style::new().fg(self.error).bg(self.bg)
     }
 
-    /// 进度条样式
+    /// Progress bar style
     pub fn progress(&self) -> Style {
         Style::new().fg(self.progress).bg(self.bg)
     }
 
-    /// 创建居中的标题行
+    /// Create centered title line
     pub fn centered_title(&self, text: String) -> Line<'static> {
         Line::from(text).centered().style(self.title())
     }
 
-    /// 创建带样式的行
+    /// Create styled line
     pub fn styled_line<'a>(&self, text: String, style: Style) -> Line<'a> {
         Line::from(text).style(style)
     }
 }
 
-/// 全局主题实例
+/// Global theme instance
 pub static THEME: Theme = Theme {
     bg: Color::Black,
     fg: Color::White,
@@ -137,7 +137,7 @@ pub static THEME: Theme = Theme {
     title: Color::Cyan,
 };
 
-/// 获取全局主题引用
+/// Get global theme reference
 pub fn theme() -> &'static Theme {
     &THEME
 }

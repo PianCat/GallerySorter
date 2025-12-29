@@ -1,6 +1,6 @@
-//! 事件处理模块
+//! Event handling module
 //!
-//! 使用crossterm进行终端事件处理。
+//! Uses crossterm for terminal event handling.
 
 use crossterm::{
     ExecutableCommand,
@@ -11,43 +11,43 @@ use crossterm::{
 };
 use std::time::Duration;
 
-/// 事件轮询间隔（毫秒）
+/// Event poll interval (milliseconds)
 const TICK_RATE: u64 = 50;
 
-/// 事件类型
+/// Event type
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TuiEvent {
-    /// 键按下
+    /// Key press
     Key(KeyCode),
-    /// Enter键
+    /// Enter key
     Enter,
-    /// Escape键
+    /// Escape key
     Escape,
-    /// 上箭头
+    /// Up arrow
     Up,
-    /// 下箭头
+    /// Down arrow
     Down,
-    /// 左箭头
+    /// Left arrow
     Left,
-    /// 右箭头
+    /// Right arrow
     Right,
-    /// Tab键
+    /// Tab key
     Tab,
-    /// Backspace键
+    /// Backspace key
     Backspace,
-    /// Delete键
+    /// Delete key
     Delete,
-    /// 字符输入
+    /// Character input
     Char(char),
-    /// Ctrl+C退出
+    /// Ctrl+C exit
     CtrlC,
-    /// 窗口调整
+    /// Window resize
     Resize(u16, u16),
-    /// Home键
+    /// Home key
     Home,
-    /// End键
+    /// End key
     End,
-    /// 无事件（超时）
+    /// No event (timeout)
     None,
 }
 
@@ -66,12 +66,12 @@ impl From<Event> for TuiEvent {
 
 impl From<KeyEvent> for TuiEvent {
     fn from(key: KeyEvent) -> Self {
-        // 忽略非按下事件
+        // Ignore non-press events
         if key.kind != KeyEventKind::Press {
             return TuiEvent::None;
         }
 
-        // 处理Ctrl+C和Ctrl+D退出
+        // Handle Ctrl+C and Ctrl+D exit
         if key.modifiers.contains(KeyModifiers::CONTROL)
             && matches!(key.code, KeyCode::Char('c') | KeyCode::Char('d'))
         {
@@ -104,24 +104,24 @@ impl From<KeyEvent> for TuiEvent {
     }
 }
 
-/// 事件轮询器
+/// Event poller
 #[derive(Debug)]
 pub struct EventPoll {
     tick_rate: Duration,
 }
 
 impl EventPoll {
-    /// 创建新的事件轮询器
+    /// Create new event poller
     pub fn new(tick_rate: Duration) -> Self {
         Self { tick_rate }
     }
 
-    /// 创建默认的事件轮询器
+    /// Create default event poller
     pub fn default() -> Self {
         Self::new(Duration::from_millis(TICK_RATE))
     }
 
-    /// 轮询下一个事件
+    /// Poll next event
     pub fn next(&self) -> TuiEvent {
         if event::poll(self.tick_rate).unwrap_or(false) {
             event::read()
@@ -132,7 +132,7 @@ impl EventPoll {
         }
     }
 
-    /// 尝试立即获取事件（非阻塞）
+    /// Try to get event immediately (non-blocking)
     pub fn try_next(&self) -> Option<TuiEvent> {
         if event::poll(Duration::ZERO).unwrap_or(false) {
             Some(
@@ -154,13 +154,13 @@ impl Default for EventPoll {
     }
 }
 
-/// 启用bracketed paste模式
+/// Enable bracketed paste mode
 pub fn enable_bracketed_paste() -> std::io::Result<()> {
     std::io::stdout().execute(EnableBracketedPaste)?;
     Ok(())
 }
 
-/// 禁用bracketed paste模式
+/// Disable bracketed paste mode
 pub fn disable_bracketed_paste() -> std::io::Result<()> {
     std::io::stdout().execute(DisableBracketedPaste)?;
     Ok(())

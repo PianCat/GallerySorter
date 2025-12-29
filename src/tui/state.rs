@@ -1,46 +1,186 @@
-//! TUI状态管理模块
+//! TUI state management module
 //!
-//! 包含TUI应用中使用的所有状态结构。
+//! Contains all state structures used in TUI applications.
 
 use crate::config::{ClassificationRule, Config, FileOperation, MonthFormat, ProcessingMode};
 use crate::process::{FileResult, ProcessingStats};
 use ratatui::widgets::ListState;
+use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use unicode_width::UnicodeWidthStr;
 
-/// 屏幕枚举
+/// Trait for enum types that represent selectable options.
+/// Provides a unified interface for selection management.
+pub trait EnumOption: Clone + Copy + Default + PartialEq + 'static {
+    /// Get the index of this variant
+    fn to_index(&self) -> usize;
+
+    /// Create a variant from index (returns default if invalid)
+    fn from_index(index: usize) -> Self;
+
+    /// Get total number of variants
+    fn count() -> usize;
+
+    /// Get all available variants (supports platform filtering)
+    fn variants() -> &'static [Self];
+}
+
+/// Generic selection state for enum-based options.
+/// Provides a unified interface for selection management across different enum types.
+#[derive(Debug, Clone, Copy)]
+pub struct EnumSelection<E: EnumOption> {
+    /// Current selected value
+    selected: E,
+    /// Phantom data to link to enum type
+    _phantom: PhantomData<E>,
+}
+
+impl<E: EnumOption> EnumSelection<E> {
+    /// Create a new selection with default value
+    pub fn new() -> Self {
+        Self {
+            selected: E::default(),
+            _phantom: PhantomData,
+        }
+    }
+
+    /// Create with a specific selection
+    pub fn with_selected(selected: E) -> Self {
+        Self {
+            selected,
+            _phantom: PhantomData,
+        }
+    }
+
+    /// Get current selected value
+    pub fn selected(&self) -> E {
+        self.selected
+    }
+
+    /// Get current selected index
+    pub fn index(&self) -> usize {
+        self.selected.to_index()
+    }
+
+    /// Set selected value by enum
+    pub fn select(&mut self, value: E) {
+        self.selected = value;
+    }
+
+    /// Set selected value by index
+    pub fn select_by_index(&mut self, index: usize) {
+        self.selected = E::from_index(index);
+    }
+
+    /// Get number of available options
+    pub fn count(&self) -> usize {
+        E::variants().len()
+    }
+
+    /// Select next option (with wrap-around)
+    pub fn next(&mut self) {
+        let count = self.count();
+        let new_index = (self.selected.to_index() + 1) % count;
+        self.selected = E::from_index(new_index);
+    }
+
+    /// Select previous option (with wrap-around)
+    pub fn prev(&mut self) {
+        let count = self.count();
+        let new_index = if self.selected.to_index() == 0 {
+            count - 1
+        } else {
+            self.selected.to_index() - 1
+        };
+        self.selected = E::from_index(new_index);
+    }
+}
+
+impl<E: EnumOption> Default for EnumSelection<E> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Boolean selection (for yes/no options)
+#[derive(Debug, Clone, Copy, Default)]
+pub struct BoolSelection(bool);
+
+impl BoolSelection {
+    /// Create a new boolean selection
+    pub fn new(value: bool) -> Self {
+        Self(value)
+    }
+
+    /// Get the value
+    pub fn value(&self) -> bool {
+        self.0
+    }
+
+    /// Toggle the value
+    pub fn toggle(&mut self) {
+        self.0 = !self.0;
+    }
+
+    /// Get count (always 2 for yes/no)
+    pub fn count(&self) -> usize {
+        2
+    }
+
+    /// Get current index
+    pub fn index(&self) -> usize {
+        if self.0 { 1 } else { 0 }
+    }
+
+    /// Select by index
+    pub fn select_by_index(&mut self, index: usize) {
+        self.0 = index == 1;
+    }
+
+    /// Select next
+    pub fn next(&mut self) {
+        self.toggle();
+    }
+
+    /// Select previous
+    pub fn prev(&mut self) {
+        self.toggle();
+    }
+}
+
+/// Screen enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Screen {
-    /// 主菜单
+    /// Main menu
     #[default]
     MainMenu,
-    /// 配置向导
+    /// Configuration wizard
     ConfigWizard,
-    /// 处理进度
+    /// Processing progress
     Progress,
-    /// 结果摘要
+    /// Result summary
     Summary,
-    /// 退出确认
+    /// Exit confirmation
     Exit,
 }
 
-/// 菜单项
+/// Menu items
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuItem {
-    /// 直接输入运行
+    /// Run directly
     RunDirect,
-    /// 使用配置运行
+    /// Run with configuration
     RunConfig,
-    /// 创建配置
+    /// Create configuration
     CreateConfig,
-    /// 退出
+    /// Exit
     Exit,
 }
 
 impl MenuItem {
-    /// 获取显示标签
+    /// Get display label
     pub fn label(&self) -> String {
         match self {
             MenuItem::RunDirect => rust_i18n::t!("menu_option_run_direct").to_string(),
@@ -51,22 +191,22 @@ impl MenuItem {
     }
 }
 
-/// 可选择项 trait - 消除 MenuState 和 SelectionState 的重复代码
+/// Selectable trait - eliminates duplicate code between MenuState and SelectionState
 pub trait Selectable {
-    /// 获取选项总数
+    /// Get total number of options
     fn count(&self) -> usize;
-    /// 获取列表状态引用
+    /// Get list state reference
     fn list_state(&self) -> &ListState;
-    /// 获取列表状态可变引用
+    /// Get list state mutable reference
     fn list_state_mut(&mut self) -> &mut ListState;
-    /// 选中下一项
+    /// Select next item
     fn next(&mut self) {
         let count = self.count();
         if let Some(i) = self.list_state().selected() {
             self.list_state_mut().select(Some((i + 1) % count));
         }
     }
-    /// 选中上一项
+    /// Select previous item
     fn prev(&mut self) {
         let count = self.count();
         if let Some(i) = self.list_state().selected() {
@@ -78,32 +218,32 @@ pub trait Selectable {
             self.list_state_mut().select(Some(prev));
         }
     }
-    /// 选中指定索引
+    /// Select specified index
     fn select(&mut self, index: usize) {
         let count = self.count();
         self.list_state_mut().select(Some(index % count));
     }
-    /// 获取当前选中值（带默认值）
+    /// Get current selected value (with default)
     fn selected_or_default(&self) -> usize {
         self.list_state().selected().unwrap_or(0)
     }
-    /// 获取当前选中值（可选）
+    /// Get current selected value (optional)
     fn selected(&self) -> Option<usize> {
         self.list_state().selected()
     }
 }
 
-/// 菜单状态
+/// Menu state
 #[derive(Debug, Default)]
 pub struct MenuState {
-    /// 列表状态（用于List widget）
+    /// List state (for List widget)
     pub list_state: ListState,
-    /// 菜单项总数
+    /// Total number of menu items
     pub count: usize,
 }
 
 impl MenuState {
-    /// 创建新菜单状态
+    /// Create new menu state
     pub fn with_count(count: usize) -> Self {
         Self {
             list_state: {
@@ -115,7 +255,7 @@ impl MenuState {
         }
     }
 
-    /// 获取当前选中项索引
+    /// Get currently selected item index
     pub fn selected(&self) -> usize {
         self.list_state.selected().unwrap_or(0)
     }
@@ -135,44 +275,44 @@ impl Selectable for MenuState {
     }
 }
 
-/// 配置向导步骤
+/// Configuration wizard steps
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ConfigStep {
-    /// 配置选择
+    /// Configuration selection
     #[default]
     ConfigSelect,
-    /// 确认是否修改配置
+    /// Confirm whether to modify configuration
     ConfigConfirm,
-    /// 配置名称
+    /// Configuration name
     ConfigName,
-    /// 输入目录
+    /// Input directory
     InputDir,
-    /// 输出目录
+    /// Output directory
     OutputDir,
-    /// 排除目录
+    /// Exclude directories
     ExcludeDir,
-    /// 处理模式
+    /// Processing mode
     ProcessingMode,
-    /// 分类规则
+    /// Classification rule
     Classification,
-    /// 月份格式
+    /// Month format
     MonthFormat,
-    /// 文件操作
+    /// File operation
     FileOperation,
-    /// 去重
+    /// Deduplication
     Deduplication,
-    /// 试运行
+    /// Dry run
     DryRun,
-    /// 按类型分类
+    /// Classify by type
     ClassifyByType,
-    /// 摘要确认
+    /// Summary
     Summary,
-    /// 确认执行
+    /// Confirm run
     ConfirmRun,
 }
 
 impl ConfigStep {
-    /// 获取步骤标题
+    /// Get step title
     pub fn title(&self) -> String {
         match self {
             ConfigStep::ConfigSelect => rust_i18n::t!("available_configurations").to_string(),
@@ -184,7 +324,7 @@ impl ConfigStep {
             ConfigStep::ProcessingMode => rust_i18n::t!("select_processing_mode").to_string(),
             ConfigStep::Classification => rust_i18n::t!("select_classification_rule").to_string(),
             ConfigStep::MonthFormat => rust_i18n::t!("select_month_format").to_string(),
-            ConfigStep::FileOperation => rust_i18n::t!("select_file_operation").to_string(),
+            ConfigStep::FileOperation => rust_i18n::t!("select_file_operation_mode").to_string(),
             ConfigStep::Deduplication => rust_i18n::t!("enable_deduplication").to_string(),
             ConfigStep::DryRun => rust_i18n::t!("dry_run_mode").to_string(),
             ConfigStep::ClassifyByType => rust_i18n::t!("classify_by_file_type").to_string(),
@@ -193,10 +333,10 @@ impl ConfigStep {
         }
     }
 
-    /// 获取选项数量
+    /// Get number of options
     pub fn option_count(&self) -> usize {
         match self {
-            ConfigStep::ConfigSelect => 1, // 实际数量由 ConfigWizardState.option_count() 返回
+            ConfigStep::ConfigSelect => 1, // Actual count returned by ConfigWizardState.option_count()
             ConfigStep::ConfigConfirm => 2,
             ConfigStep::ProcessingMode => 3,
             ConfigStep::Classification => 3,
@@ -208,7 +348,7 @@ impl ConfigStep {
         }
     }
 
-    /// 获取选项列表
+    /// Get option list
     pub fn options(&self) -> Vec<String> {
         match self {
             ConfigStep::ProcessingMode => vec![
@@ -229,6 +369,8 @@ impl ConfigStep {
                 rust_i18n::t!("operation_copy").to_string(),
                 rust_i18n::t!("operation_move").to_string(),
                 rust_i18n::t!("operation_hardlink").to_string(),
+                #[cfg(unix)]
+                rust_i18n::t!("operation_symlink").to_string(),
             ],
             ConfigStep::Deduplication | ConfigStep::DryRun | ConfigStep::ClassifyByType => vec![
                 rust_i18n::t!("option_no").to_string(),
@@ -236,7 +378,7 @@ impl ConfigStep {
             ],
             ConfigStep::ConfigSelect => vec![rust_i18n::t!("no_configs_found").to_string()],
             ConfigStep::ConfigConfirm => vec![
-                rust_i18n::t!("option_no").to_string(), // 默认：不修改，直接执行
+                rust_i18n::t!("option_no").to_string(), // Default: no modification, run directly
                 rust_i18n::t!("option_yes").to_string(),
             ],
             ConfigStep::ConfirmRun => vec![
@@ -247,7 +389,7 @@ impl ConfigStep {
         }
     }
 
-    /// 获取下一步
+    /// Get next step
     pub fn next(&self, classification: ClassificationRule) -> Self {
         match self {
             ConfigStep::ConfigSelect => ConfigStep::ConfigConfirm,
@@ -275,55 +417,55 @@ impl ConfigStep {
     }
 }
 
-/// 配置向导状态
+/// Configuration wizard state
 #[derive(Debug, Default)]
 pub struct ConfigWizardState {
-    /// 当前步骤
+    /// Current step
     pub step: ConfigStep,
-    /// 输入目录
+    /// Input directories
     pub input_dirs: String,
-    /// 输出目录
+    /// Output directory
     pub output_dir: String,
-    /// 排除目录
+    /// Exclude directories
     pub exclude_dirs: String,
-    /// 处理模式
-    pub processing_mode: ProcessingMode,
-    /// 分类规则
-    pub classification: ClassificationRule,
-    /// 月份格式
-    pub month_format: MonthFormat,
-    /// 文件操作
-    pub operation: FileOperation,
-    /// 去重
-    pub deduplicate: bool,
-    /// 试运行
-    pub dry_run: bool,
-    /// 按类型分类
-    pub classify_by_type: bool,
-    /// 配置名称
+    /// Processing mode selection
+    pub processing_mode: EnumSelection<ProcessingMode>,
+    /// Classification rule selection
+    pub classification: EnumSelection<ClassificationRule>,
+    /// Month format selection
+    pub month_format: EnumSelection<MonthFormat>,
+    /// File operation selection
+    pub operation: EnumSelection<FileOperation>,
+    /// Deduplication selection
+    pub deduplicate: BoolSelection,
+    /// Dry run selection
+    pub dry_run: BoolSelection,
+    /// Classify by type selection
+    pub classify_by_type: BoolSelection,
+    /// Configuration name
     pub config_name: String,
-    /// 可用配置列表
+    /// Available configurations list
     pub available_configs: Vec<PathBuf>,
-    /// 选中的配置索引
+    /// Selected configuration index
     pub selected_config: Option<usize>,
-    /// 验证错误信息
+    /// Validation error message
     pub error_message: Option<String>,
-    /// 配置是否已保存
+    /// Configuration has been saved
     pub config_saved: bool,
-    /// 配置保存路径
+    /// Configuration save path
     pub config_path: Option<PathBuf>,
-    /// 是否跳过确认运行步骤（RunDirect 模式）
+    /// Whether to skip confirm run step (RunDirect mode)
     pub skip_confirm_run: bool,
 }
 
 impl ConfigWizardState {
-    /// 创建新状态
+    /// Create new state
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// 检查在 ConfigSelect 步骤是否可以确认选择
-    /// 如果没有配置文件，返回 false（只能按 ESC 返回）
+    /// Check if confirmation is allowed at ConfigSelect step
+    /// Returns false if no config files exist (only ESC can be pressed)
     pub fn can_confirm_config_select(&self) -> bool {
         if self.step == ConfigStep::ConfigSelect {
             !self.available_configs.is_empty()
@@ -332,27 +474,27 @@ impl ConfigWizardState {
         }
     }
 
-    /// 重置布尔选项步骤的选中状态为默认值（否/0）
-    /// 当进入 Deduplication、DryRun、ClassifyByType 步骤时调用
+    /// Reset boolean option step selection to default (no/0)
+    /// Called when entering Deduplication, DryRun, ClassifyByType steps
     pub fn reset_boolean_selection(&mut self) {
         match self.step {
             ConfigStep::Deduplication => {
-                self.deduplicate = false;
+                self.deduplicate.select_by_index(0);
                 self.selected_config = Some(0);
             }
             ConfigStep::DryRun => {
-                self.dry_run = false;
+                self.dry_run.select_by_index(0);
                 self.selected_config = Some(0);
             }
             ConfigStep::ClassifyByType => {
-                self.classify_by_type = false;
+                self.classify_by_type.select_by_index(0);
                 self.selected_config = Some(0);
             }
             _ => {}
         }
     }
 
-    /// 从状态构建Config
+    /// Build Config from state
     pub fn build_config(&self) -> Config {
         let input_dirs: Vec<PathBuf> = self
             .input_dirs
@@ -372,19 +514,19 @@ impl ConfigWizardState {
             input_dirs,
             output_dir: PathBuf::from(&self.output_dir),
             exclude_dirs,
-            processing_mode: self.processing_mode,
-            classification: self.classification,
-            month_format: self.month_format,
-            classify_by_type: self.classify_by_type,
-            operation: self.operation,
-            deduplicate: self.deduplicate,
-            dry_run: self.dry_run,
+            processing_mode: self.processing_mode.selected(),
+            classification: self.classification.selected(),
+            month_format: self.month_format.selected(),
+            classify_by_type: self.classify_by_type.value(),
+            operation: self.operation.selected(),
+            deduplicate: self.deduplicate.value(),
+            dry_run: self.dry_run.value(),
             verbose: false,
             ..Default::default()
         }
     }
 
-    /// 验证当前步骤
+    /// Validate current step
     pub fn validate(&self, step: &ConfigStep) -> Result<(), String> {
         match step {
             ConfigStep::InputDir => {
@@ -415,7 +557,7 @@ impl ConfigWizardState {
         }
     }
 
-    /// 保存配置文件
+    /// Save configuration file
     pub fn save_config(&mut self) -> Result<PathBuf, String> {
         let exe_dir = std::env::current_exe()
             .ok()
@@ -424,7 +566,7 @@ impl ConfigWizardState {
 
         let config_dir = exe_dir.join("Config");
 
-        // 创建配置目录
+        // Create config directory
         std::fs::create_dir_all(&config_dir)
             .map_err(|e| format!("Failed to create config directory: {}", e))?;
 
@@ -444,7 +586,7 @@ impl ConfigWizardState {
         Ok(config_path)
     }
 
-    /// 刷新可用配置列表
+    /// Refresh available configurations list
     pub fn refresh_configs(&mut self) {
         let exe_dir = std::env::current_exe()
             .ok()
@@ -470,7 +612,7 @@ impl ConfigWizardState {
                 })
                 .unwrap_or_default()
         };
-        // 如果有配置文件，默认选中第一个
+        // If config files exist, select the first one by default
         if self.available_configs.is_empty() {
             self.selected_config = None;
         } else if self.selected_config.is_none() {
@@ -478,114 +620,114 @@ impl ConfigWizardState {
         }
     }
 
-    /// 获取当前选中值
+    /// Get current selected value
     pub fn selected_value(&self) -> usize {
         match self.step {
-            ConfigStep::ProcessingMode => self.processing_mode as usize,
-            ConfigStep::Classification => self.classification as usize,
-            ConfigStep::MonthFormat => self.month_format as usize,
-            ConfigStep::FileOperation => self.operation as usize,
-            ConfigStep::Deduplication
-            | ConfigStep::DryRun
-            | ConfigStep::ClassifyByType
-            | ConfigStep::ConfirmRun
-            | ConfigStep::ConfigConfirm => self.selected_config.unwrap_or(0),
-            ConfigStep::ConfigSelect => self.selected_config.unwrap_or(0),
+            ConfigStep::ProcessingMode => self.processing_mode.index(),
+            ConfigStep::Classification => self.classification.index(),
+            ConfigStep::MonthFormat => self.month_format.index(),
+            ConfigStep::FileOperation => self.operation.index(),
+            ConfigStep::Deduplication => self.deduplicate.index(),
+            ConfigStep::DryRun => self.dry_run.index(),
+            ConfigStep::ClassifyByType => self.classify_by_type.index(),
+            ConfigStep::ConfirmRun | ConfigStep::ConfigConfirm | ConfigStep::ConfigSelect => {
+                self.selected_config.unwrap_or(0)
+            }
             _ => 0,
         }
     }
 
-    /// 获取当前步骤的选项数量（考虑可用配置）
+    /// Get number of options for current step (considering available configs)
     pub fn option_count(&self) -> usize {
         match self.step {
             ConfigStep::ConfigSelect => self.available_configs.len().max(1),
             ConfigStep::ConfigConfirm => 2,
-            ConfigStep::ProcessingMode => 3,
-            ConfigStep::Classification => 3,
-            ConfigStep::MonthFormat => 2,
-            ConfigStep::FileOperation => 3,
-            ConfigStep::Deduplication | ConfigStep::DryRun | ConfigStep::ClassifyByType => 2,
+            ConfigStep::ProcessingMode => self.processing_mode.count(),
+            ConfigStep::Classification => self.classification.count(),
+            ConfigStep::MonthFormat => self.month_format.count(),
+            ConfigStep::FileOperation => self.operation.count(),
+            ConfigStep::Deduplication => self.deduplicate.count(),
+            ConfigStep::DryRun => self.dry_run.count(),
+            ConfigStep::ClassifyByType => self.classify_by_type.count(),
             ConfigStep::ConfirmRun => 2,
             _ => 0,
         }
     }
 
-    /// 设置选中值
+    /// Set selected value
     pub fn set_selected(&mut self, index: usize) {
         match self.step {
-            ConfigStep::ProcessingMode => {
-                self.processing_mode = match index {
-                    0 => ProcessingMode::Full,
-                    1 => ProcessingMode::Supplement,
-                    2 => ProcessingMode::Incremental,
-                    _ => ProcessingMode::Full,
-                };
-            }
-            ConfigStep::Classification => {
-                self.classification = match index {
-                    0 => ClassificationRule::None,
-                    1 => ClassificationRule::Year,
-                    2 => ClassificationRule::YearMonth,
-                    _ => ClassificationRule::None,
-                };
-            }
-            ConfigStep::MonthFormat => {
-                self.month_format = match index {
-                    0 => MonthFormat::Nested,
-                    1 => MonthFormat::Combined,
-                    _ => MonthFormat::Nested,
-                };
-            }
-            ConfigStep::FileOperation => {
-                self.operation = match index {
-                    0 => FileOperation::Copy,
-                    1 => FileOperation::Move,
-                    2 => FileOperation::Hardlink,
-                    _ => FileOperation::Copy,
-                };
-            }
-            ConfigStep::Deduplication => {
-                self.deduplicate = index == 1;
+            ConfigStep::ProcessingMode => self.processing_mode.select_by_index(index),
+            ConfigStep::Classification => self.classification.select_by_index(index),
+            ConfigStep::MonthFormat => self.month_format.select_by_index(index),
+            ConfigStep::FileOperation => self.operation.select_by_index(index),
+            ConfigStep::Deduplication => self.deduplicate.select_by_index(index),
+            ConfigStep::DryRun => self.dry_run.select_by_index(index),
+            ConfigStep::ClassifyByType => self.classify_by_type.select_by_index(index),
+            ConfigStep::ConfirmRun | ConfigStep::ConfigConfirm | ConfigStep::ConfigSelect => {
                 self.selected_config = Some(index);
             }
-            ConfigStep::DryRun => {
-                self.dry_run = index == 1;
-                self.selected_config = Some(index);
+            _ => {}
+        }
+    }
+
+    /// Navigate to next option
+    pub fn navigate_next(&mut self) {
+        match self.step {
+            ConfigStep::ProcessingMode => self.processing_mode.next(),
+            ConfigStep::Classification => self.classification.next(),
+            ConfigStep::MonthFormat => self.month_format.next(),
+            ConfigStep::FileOperation => self.operation.next(),
+            ConfigStep::Deduplication => self.deduplicate.next(),
+            ConfigStep::DryRun => self.dry_run.next(),
+            ConfigStep::ClassifyByType => self.classify_by_type.next(),
+            ConfigStep::ConfirmRun | ConfigStep::ConfigConfirm | ConfigStep::ConfigSelect => {
+                if let Some(idx) = self.selected_config {
+                    let count = self.option_count();
+                    self.selected_config = Some((idx + 1) % count);
+                }
             }
-            ConfigStep::ConfirmRun => {
-                self.selected_config = Some(index);
-            }
-            ConfigStep::ClassifyByType => {
-                self.classify_by_type = index == 1;
-                self.selected_config = Some(index);
-            }
-            ConfigStep::ConfigSelect => {
-                self.selected_config = Some(index);
-            }
-            ConfigStep::ConfigConfirm => {
-                self.selected_config = Some(index);
+            _ => {}
+        }
+    }
+
+    /// Navigate to previous option
+    pub fn navigate_prev(&mut self) {
+        match self.step {
+            ConfigStep::ProcessingMode => self.processing_mode.prev(),
+            ConfigStep::Classification => self.classification.prev(),
+            ConfigStep::MonthFormat => self.month_format.prev(),
+            ConfigStep::FileOperation => self.operation.prev(),
+            ConfigStep::Deduplication => self.deduplicate.prev(),
+            ConfigStep::DryRun => self.dry_run.prev(),
+            ConfigStep::ClassifyByType => self.classify_by_type.prev(),
+            ConfigStep::ConfirmRun | ConfigStep::ConfigConfirm | ConfigStep::ConfigSelect => {
+                if let Some(idx) = self.selected_config {
+                    let count = self.option_count();
+                    self.selected_config = Some(if idx == 0 { count - 1 } else { idx - 1 });
+                }
             }
             _ => {}
         }
     }
 }
 
-/// 输入状态
+/// Input state
 #[derive(Debug, Default)]
 pub struct InputState {
-    /// 输入缓冲区
+    /// Input buffer
     pub buffer: String,
-    /// 光标位置
+    /// Cursor position
     pub cursor: usize,
 }
 
 impl InputState {
-    /// 创建新输入状态
+    /// Create new input state
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// 使用初始值创建
+    /// Create with initial value
     pub fn with_value(value: &str) -> Self {
         Self {
             buffer: value.to_string(),
@@ -593,19 +735,19 @@ impl InputState {
         }
     }
 
-    /// 清空输入
+    /// Clear input
     pub fn clear(&mut self) {
         self.buffer.clear();
         self.cursor = 0;
     }
 
-    /// 插入字符
+    /// Insert character
     pub fn insert_char(&mut self, c: char) {
         self.buffer.insert(self.cursor, c);
         self.cursor += c.len_utf8();
     }
 
-    /// 删除光标前字符
+    /// Delete character before cursor
     pub fn delete_before_cursor(&mut self) {
         if self.cursor > 0 {
             let prev_char_len = self.buffer[..self.cursor]
@@ -618,7 +760,7 @@ impl InputState {
         }
     }
 
-    /// 删除光标后字符
+    /// Delete character after cursor
     pub fn delete_after_cursor(&mut self) {
         if self.cursor < self.buffer.len() {
             let next_char_len = self.buffer[self.cursor..]
@@ -630,7 +772,7 @@ impl InputState {
         }
     }
 
-    /// 光标左移
+    /// Move cursor left
     pub fn move_cursor_left(&mut self) {
         if self.cursor > 0 {
             self.cursor -= self.buffer[..self.cursor]
@@ -641,7 +783,7 @@ impl InputState {
         }
     }
 
-    /// 光标右移
+    /// Move cursor right
     pub fn move_cursor_right(&mut self) {
         if self.cursor < self.buffer.len() {
             self.cursor += self.buffer[self.cursor..]
@@ -652,40 +794,40 @@ impl InputState {
         }
     }
 
-    /// 光标移到开头
+    /// Move cursor to start
     pub fn move_cursor_to_start(&mut self) {
         self.cursor = 0;
     }
 
-    /// 光标移到末尾
+    /// Move cursor to end
     pub fn move_cursor_to_end(&mut self) {
         self.cursor = self.buffer.len();
     }
 
-    /// 获取可视光标位置
+    /// Get visual cursor position
     pub fn visual_cursor_position(&self) -> usize {
         self.buffer[..self.cursor].width()
     }
 
-    /// 获取当前值
+    /// Get current value
     pub fn value(&self) -> &str {
         &self.buffer
     }
 }
 
-/// 进度状态
+/// Progress state
 #[derive(Debug)]
 pub struct ProgressState {
-    /// 处理统计
+    /// Processing statistics
     pub stats: Arc<ProcessingStats>,
-    /// 总文件数
+    /// Total file count
     pub total_files: usize,
-    /// 当前处理文件
+    /// Current processing file
     pub current_file: String,
 }
 
 impl ProgressState {
-    /// 创建新进度状态
+    /// Create new progress state
     pub fn new(stats: Arc<ProcessingStats>, total_files: usize) -> Self {
         Self {
             stats,
@@ -694,7 +836,7 @@ impl ProgressState {
         }
     }
 
-    /// 设置当前处理文件
+    /// Set current processing file
     pub fn set_current_file(&mut self, file: &str) {
         self.current_file = if file.len() > 50 {
             format!("...{}", &file[file.len() - 47..])
@@ -703,7 +845,7 @@ impl ProgressState {
         };
     }
 
-    /// 获取进度比例
+    /// Get progress ratio
     pub fn progress_ratio(&self) -> f64 {
         let processed = self.stats.processed.load(Ordering::Relaxed);
         let total = self.total_files;
@@ -714,42 +856,42 @@ impl ProgressState {
         }
     }
 
-    /// 已处理数量
+    /// Processed count
     pub fn processed(&self) -> usize {
         self.stats.processed.load(Ordering::Relaxed)
     }
 
-    /// 跳过数量
+    /// Skipped count
     pub fn skipped(&self) -> usize {
         self.stats.skipped.load(Ordering::Relaxed)
     }
 
-    /// 重复数量
+    /// Duplicates count
     pub fn duplicates(&self) -> usize {
         self.stats.duplicates.load(Ordering::Relaxed)
     }
 
-    /// 失败数量
+    /// Failed count
     pub fn failed(&self) -> usize {
         self.stats.failed.load(Ordering::Relaxed)
     }
 }
 
-/// 摘要状态
+/// Summary state
 #[derive(Debug)]
 pub struct SummaryState {
-    /// 处理统计
+    /// Processing statistics
     pub stats: ProcessingStats,
-    /// 处理结果
+    /// Processing results
     pub results: Vec<FileResult>,
-    /// 试运行模式
+    /// Dry run mode
     pub dry_run: bool,
-    /// 日志路径
+    /// Log path
     pub log_path: Option<PathBuf>,
 }
 
 impl SummaryState {
-    /// 创建新摘要状态
+    /// Create new summary state
     pub fn new(
         stats: ProcessingStats,
         results: Vec<FileResult>,
@@ -765,17 +907,17 @@ impl SummaryState {
     }
 }
 
-/// 列表选择状态
+/// List selection state
 #[derive(Debug, Default)]
 pub struct SelectionState {
     /// ListState for ratatui
     pub list_state: ListState,
-    /// 选项总数
+    /// Total number of options
     pub count: usize,
 }
 
 impl SelectionState {
-    /// 创建新选择状态
+    /// Create new selection state
     pub fn with_count(count: usize) -> Self {
         Self {
             list_state: {
@@ -787,12 +929,12 @@ impl SelectionState {
         }
     }
 
-    /// 获取当前选中索引
+    /// Get currently selected index
     pub fn selected(&self) -> Option<usize> {
         self.list_state.selected()
     }
 
-    /// 设置选中索引
+    /// Set selected index
     pub fn select(&mut self, index: usize) {
         self.list_state.select(Some(index % self.count));
     }

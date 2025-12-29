@@ -1,5 +1,6 @@
 //! Configuration types for the gallery sorter
 
+use crate::tui::state::EnumOption;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -79,6 +80,147 @@ pub enum FileOperation {
     Symlink,
     /// Create hard links
     Hardlink,
+}
+
+impl EnumOption for ProcessingMode {
+    fn to_index(&self) -> usize {
+        match self {
+            ProcessingMode::Full => 0,
+            ProcessingMode::Supplement => 1,
+            ProcessingMode::Incremental => 2,
+        }
+    }
+
+    fn from_index(index: usize) -> Self {
+        match index {
+            0 => ProcessingMode::Full,
+            1 => ProcessingMode::Supplement,
+            2 => ProcessingMode::Incremental,
+            _ => ProcessingMode::Incremental,
+        }
+    }
+
+    fn count() -> usize {
+        3
+    }
+
+    fn variants() -> &'static [Self] {
+        &[ProcessingMode::Full, ProcessingMode::Supplement, ProcessingMode::Incremental]
+    }
+}
+
+impl EnumOption for ClassificationRule {
+    fn to_index(&self) -> usize {
+        match self {
+            ClassificationRule::None => 0,
+            ClassificationRule::Year => 1,
+            ClassificationRule::YearMonth => 2,
+        }
+    }
+
+    fn from_index(index: usize) -> Self {
+        match index {
+            0 => ClassificationRule::None,
+            1 => ClassificationRule::Year,
+            2 => ClassificationRule::YearMonth,
+            _ => ClassificationRule::None,
+        }
+    }
+
+    fn count() -> usize {
+        3
+    }
+
+    fn variants() -> &'static [Self] {
+        &[
+            ClassificationRule::None,
+            ClassificationRule::Year,
+            ClassificationRule::YearMonth,
+        ]
+    }
+}
+
+impl EnumOption for MonthFormat {
+    fn to_index(&self) -> usize {
+        match self {
+            MonthFormat::Nested => 0,
+            MonthFormat::Combined => 1,
+        }
+    }
+
+    fn from_index(index: usize) -> Self {
+        match index {
+            0 => MonthFormat::Nested,
+            1 => MonthFormat::Combined,
+            _ => MonthFormat::Nested,
+        }
+    }
+
+    fn count() -> usize {
+        2
+    }
+
+    fn variants() -> &'static [Self] {
+        &[MonthFormat::Nested, MonthFormat::Combined]
+    }
+}
+
+impl EnumOption for FileOperation {
+    fn to_index(&self) -> usize {
+        match self {
+            FileOperation::Copy => 0,
+            FileOperation::Move => 1,
+            FileOperation::Hardlink => 2,
+            #[cfg(unix)]
+            FileOperation::Symlink => 3,
+            #[cfg(windows)]
+            FileOperation::Symlink => 3,
+        }
+    }
+
+    fn from_index(index: usize) -> Self {
+        match index {
+            0 => FileOperation::Copy,
+            1 => FileOperation::Move,
+            2 => FileOperation::Hardlink,
+            #[cfg(unix)]
+            3 => FileOperation::Symlink,
+            #[cfg(windows)]
+            3 => FileOperation::Symlink,
+            _ => FileOperation::Copy,
+        }
+    }
+
+    fn count() -> usize {
+        #[cfg(unix)]
+        {
+            // Unix: 4 个选项 (Copy, Move, Hardlink, Symlink)
+            4
+        }
+        #[cfg(windows)]
+        {
+            // Windows: 3 个选项 (不显示 Symlink)
+            3
+        }
+    }
+
+    fn variants() -> &'static [Self] {
+        #[cfg(unix)]
+        {
+            // Unix: 显示所有 4 个选项
+            &[
+                FileOperation::Copy,
+                FileOperation::Move,
+                FileOperation::Hardlink,
+                FileOperation::Symlink,
+            ]
+        }
+        #[cfg(windows)]
+        {
+            // Windows: 只显示 3 个选项
+            &[FileOperation::Copy, FileOperation::Move, FileOperation::Hardlink]
+        }
+    }
 }
 
 /// Configuration for the gallery sorter

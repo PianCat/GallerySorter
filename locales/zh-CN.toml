@@ -58,10 +58,11 @@ month_format_nested = "嵌套格式 - YYYY/MM/"
 month_format_combined = "组合格式 - YYYY-MM/"
 
 # File Operations
-select_file_operation = "选择文件操作"
+select_file_operation_mode = "选择文件操作模式"
 operation_copy = "复制 - 复制文件到目标目录"
 operation_move = "移动 - 移动文件到目标目录"
 operation_hardlink = "硬链接 - 创建硬链接"
+operation_symlink = "符号链接 - 创建符号链接"
 
 # Options
 enable_deduplication = "启用文件去重？"

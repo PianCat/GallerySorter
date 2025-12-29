@@ -58,10 +58,11 @@ month_format_nested = "Nested - YYYY/MM/"
 month_format_combined = "Combined - YYYY-MM/"
 
 # File Operations
-select_file_operation = "Select file operation"
+select_file_operation_mode = "Select file operation mode"
 operation_copy = "Copy - Copy files to destination"
 operation_move = "Move - Move files to destination"
 operation_hardlink = "Hardlink - Create hard links"
+operation_symlink = "Symlink - Create symbolic links"
 
 # Options
 enable_deduplication = "Enable file deduplication?"

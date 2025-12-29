@@ -18,9 +18,9 @@ rust_i18n::i18n!("locales", fallback = "en");
 
 // CLI Output Module
 mod cli_output {
-    //! CLI 输出美化模块
+    //! CLI output styling module
     //!
-    //! 为命令行输出提供统一的颜色和格式样式。
+    //! Provides unified color and formatting styles for CLI output.
 
     use crossterm::{
         ExecutableCommand,
@@ -28,28 +28,28 @@ mod cli_output {
     };
     use std::io::stdout;
 
-    /// CLI 主题颜色
+    /// CLI theme colors
     pub struct CliTheme;
 
     impl CliTheme {
-        /// 成功颜色（绿色）
+        /// Success color (green)
         pub const SUCCESS: Color = Color::Green;
-        /// 警告颜色（黄色）
+        /// Warning color (yellow)
         pub const WARNING: Color = Color::Yellow;
-        /// 错误颜色（红色）
+        /// Error color (red)
         pub const ERROR: Color = Color::Red;
-        /// 提示颜色（暗灰色）
+        /// Hint color (dark gray)
         pub const HINT: Color = Color::DarkGrey;
-        /// 强调颜色（青色）
+        /// Accent color (cyan)
         pub const ACCENT: Color = Color::Cyan;
     }
 
-    /// 打印分隔线
+    /// Print a separator line
     pub fn print_separator() {
         let _ = stdout().execute(Print(&format!("{}\n", "─".repeat(60))));
     }
 
-    /// 打印居中的标题
+    /// Print a centered title
     pub fn print_title(title: &str) {
         let width = 60;
         let padding = (width - title.len()) / 2;
@@ -65,25 +65,25 @@ mod cli_output {
         let _ = stdout().execute(Print("\n"));
     }
 
-    /// 打印警告消息
+    /// Print warning message
     pub fn print_warning(msg: &str) {
         let _ = stdout().execute(Print(style("⚠ ").with(CliTheme::WARNING).bold()));
         let _ = stdout().execute(Print(format!("{}\n", msg)));
     }
 
-    /// 打印错误消息
+    /// Print error message
     pub fn print_error(msg: &str) {
         let _ = stdout().execute(Print(style("✗ ").with(CliTheme::ERROR).bold()));
         let _ = stdout().execute(Print(format!("{}\n", msg)));
     }
 
-    /// 打印提示消息
+    /// Print hint message
     pub fn print_hint(msg: &str) {
         let _ = stdout().execute(Print(style("→ ").with(CliTheme::HINT)));
         let _ = stdout().execute(Print(format!("{}\n", msg)));
     }
 
-    /// 打印键值对
+    /// Print key-value pair
     pub fn print_key_value(key: &str, value: &str, value_color: Option<Color>) {
         let key_styled = style(key).with(CliTheme::HINT);
         let value_styled = match value_color {
@@ -97,7 +97,7 @@ mod cli_output {
         let _ = stdout().execute(Print("\n"));
     }
 
-    /// 打印统计项
+    /// Print statistics item
     pub fn print_stat(key: &str, value: &str, color: Color) {
         let key_styled = style(key).with(CliTheme::HINT);
         let value_styled = style(value).with(color).bold();
@@ -108,7 +108,7 @@ mod cli_output {
         let _ = stdout().execute(Print("\n"));
     }
 
-    /// 打印处理结果行
+    /// Print processing result line
     pub fn print_result(status_icon: &str, status_color: Color, source: &str, dest_or_msg: &str) {
         let icon_styled = style(status_icon).with(status_color).bold();
         let source_styled = style(source).italic();
@@ -123,15 +123,15 @@ mod cli_output {
         let _ = stdout().execute(Print("\n"));
     }
 
-    /// 打印日志文件路径
+    /// Print log file path
     pub fn print_log_path(path: &str) {
         let _ = stdout().execute(Print("\n"));
         let _ = stdout().execute(Print(style("  📁 ").with(CliTheme::ACCENT)));
-        let _ = stdout().execute(Print(style("日志文件: ").with(CliTheme::HINT)));
+        let _ = stdout().execute(Print(style("Log file: ").with(CliTheme::HINT)));
         let _ = stdout().execute(Print(format!("{}\n", path)));
     }
 
-    /// 打印空行
+    /// Print blank line
     pub fn print_blank() {
         let _ = stdout().execute(Print("\n"));
     }
@@ -191,7 +191,7 @@ fn run_interactive_mode() -> Result<()> {
         }
     };
 
-    // 日志路径已在 TUI 摘要屏幕显示
+    // Log path is already displayed on the TUI summary screen
 
     Ok(())
 }

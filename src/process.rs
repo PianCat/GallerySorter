@@ -154,6 +154,20 @@ impl Processor {
                 .ok(); // Ignore if already initialized
         }
 
+        // Check if symlink operation requires elevation on Windows
+        #[cfg(windows)]
+        if config.operation == FileOperation::Symlink {
+            use crate::os::windows as os_windows;
+            if os_windows::symlink_needs_elevation() {
+                warn!("Symlink operation requires administrator privileges on Windows");
+                return Err(Error::Config(
+                    "Symlink operation requires administrator privileges on Windows. \
+                    Please run the application as administrator, or enable Developer Mode in Windows Settings."
+                        .to_string(),
+                ));
+            }
+        }
+
         // Load existing state for incremental processing
         let state = if config.processing_mode == ProcessingMode::Incremental {
             ProcessingState::load(&config.get_state_file())?
@@ -392,11 +406,8 @@ impl Processor {
 
         // Wrap state in Arc<Mutex> for shared access
         let state = Arc::new(Mutex::new(std::mem::take(&mut self.state)));
-        let stats = Arc::new(ProcessingStats::new());
-        stats.total_files.store(
-            self.stats.total_files.load(Ordering::Relaxed),
-            Ordering::Relaxed,
-        );
+        // Use self.stats to share with UI progress
+        let stats = self.stats.clone();
 
         // Map to track hash -> destination for duplicate reporting
         let hash_to_dest: Arc<Mutex<HashMap<u64, PathBuf>>> = Arc::new(Mutex::new(HashMap::new()));
@@ -456,20 +467,6 @@ impl Processor {
             .expect("All references should be dropped")
             .into_inner()
             .unwrap();
-
-        // Update stats (add to existing counts to preserve watermark-filtered files count)
-        self.stats
-            .processed
-            .fetch_add(stats.processed.load(Ordering::Relaxed), Ordering::Relaxed);
-        self.stats
-            .skipped
-            .fetch_add(stats.skipped.load(Ordering::Relaxed), Ordering::Relaxed);
-        self.stats
-            .duplicates
-            .fetch_add(stats.duplicates.load(Ordering::Relaxed), Ordering::Relaxed);
-        self.stats
-            .failed
-            .fetch_add(stats.failed.load(Ordering::Relaxed), Ordering::Relaxed);
 
         // Save state if incremental processing is enabled
         if self.config.processing_mode == ProcessingMode::Incremental && !self.config.dry_run {

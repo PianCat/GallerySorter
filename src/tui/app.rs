@@ -1,6 +1,6 @@
-//! TUI应用主模块
+//! TUI application main module
 //!
-//! 包含TUI应用的创建和运行逻辑。
+//! Contains TUI application creation and running logic.
 
 use crate::config::Config;
 use crate::process::ProcessingStats;
@@ -10,23 +10,23 @@ use crate::tui::ui::{AppState, TuiResult, render};
 use ratatui::DefaultTerminal;
 use std::path::PathBuf;
 
-/// TUI应用
+/// TUI application
 #[derive(Debug)]
 pub struct TuiApp {
-    /// 终端
+    /// Terminal
     pub terminal: DefaultTerminal,
-    /// 事件轮询器
+    /// Event poller
     pub event_poll: EventPoll,
-    /// 应用状态
+    /// Application state
     pub state: AppState,
-    /// 日志路径
+    /// Log path
     log_path: Option<PathBuf>,
-    /// 是否应运行处理
+    /// Whether to run processing
     should_run_processing: bool,
 }
 
 impl TuiApp {
-    /// 创建新的TUI应用
+    /// Create new TUI application
     pub fn new() -> std::io::Result<Self> {
         let terminal = ratatui::init();
         let event_poll = EventPoll::default();
@@ -41,31 +41,31 @@ impl TuiApp {
         })
     }
 
-    /// 设置日志路径
+    /// Set log path
     pub fn set_log_path(&mut self, path: PathBuf) {
         self.log_path = Some(path);
     }
 
-    /// 运行应用
+    /// Run application
     pub fn run(&mut self) -> std::io::Result<Option<TuiResult>> {
-        // 初始渲染
+        // Initial render
         render(&mut self.terminal, &mut self.state)?;
 
-        // 主事件循环
+        // Main event loop
         loop {
-            // 检查是否需要运行处理
+            // Check if processing should run
             if self.should_run_processing {
                 let config = self.state.result.as_ref().map(|r| r.config.clone());
                 if let Some(cfg) = config {
-                    // 切换到进度屏幕
+                    // Switch to progress screen
                     self.state.current_screen = Screen::Progress;
                     render(&mut self.terminal, &mut self.state)?;
 
-                    // 运行处理
+                    // Run processing
                     let summary_state =
                         crate::tui::run_processing(&mut self.terminal, cfg, self.log_path.clone())?;
 
-                    // 设置摘要状态并切换到摘要屏幕
+                    // Set summary state and switch to summary screen
                     self.state.summary_state = summary_state;
                     self.state.current_screen = Screen::Summary;
                     self.should_run_processing = false;
@@ -85,9 +85,9 @@ impl TuiApp {
                 }
                 event => {
                     if self.handle_event(event)? {
-                        // 如果是退出请求，检查是否在摘要屏幕
+                        // If exit request, check if on summary screen
                         if self.state.current_screen == Screen::Summary {
-                            // 返回主菜单而不是退出
+                            // Return to main menu instead of exiting
                             self.state.current_screen = Screen::MainMenu;
                             self.state.menu_state = crate::tui::state::MenuState::with_count(4);
                             self.state.progress_state = crate::tui::ProgressState::new(
@@ -114,7 +114,7 @@ impl TuiApp {
         Ok(self.state.result.take())
     }
 
-    /// 处理事件
+    /// Handle event
     fn handle_event(&mut self, event: TuiEvent) -> std::io::Result<bool> {
         match self.state.current_screen {
             Screen::MainMenu => self.handle_main_menu(event),
@@ -125,7 +125,7 @@ impl TuiApp {
         }
     }
 
-    /// 处理主菜单事件
+    /// Handle main menu event
     fn handle_main_menu(&mut self, event: TuiEvent) -> std::io::Result<bool> {
         match event {
             TuiEvent::Up | TuiEvent::Left => self.state.menu_state.prev(),
@@ -137,7 +137,7 @@ impl TuiApp {
                     self.state.current_screen = Screen::ConfigWizard;
                     self.state.config_wizard = ConfigWizardState::new();
                     self.state.config_wizard.step = ConfigStep::InputDir;
-                    self.state.config_wizard.skip_confirm_run = true; // 跳过确认运行步骤
+                    self.state.config_wizard.skip_confirm_run = true; // Skip confirm run step
                     self.state.input_state.clear();
                 }
                 1 => {
@@ -145,7 +145,7 @@ impl TuiApp {
                     self.state.current_screen = Screen::ConfigWizard;
                     self.state.config_wizard = ConfigWizardState::new();
                     self.state.config_wizard.step = ConfigStep::ConfigSelect;
-                    self.state.config_wizard.skip_confirm_run = false; // 不跳过确认运行
+                    self.state.config_wizard.skip_confirm_run = false; // Don't skip confirm run
                     self.state.config_wizard.refresh_configs();
                 }
                 2 => {
@@ -164,7 +164,7 @@ impl TuiApp {
         Ok(false)
     }
 
-    /// 处理配置向导事件
+    /// Handle config wizard event
     fn handle_config_wizard(&mut self, event: TuiEvent) -> std::io::Result<bool> {
         let step = self.state.config_wizard.step.clone();
         let options_count = self.state.config_wizard.option_count();
@@ -172,8 +172,7 @@ impl TuiApp {
         match event {
             TuiEvent::Up | TuiEvent::Left => {
                 if options_count > 0 {
-                    self.state.select_state.select(None);
-                    self.navigate_selection(-1);
+                    self.state.config_wizard.navigate_prev();
                 } else if options_count == 0
                     && step != ConfigStep::Summary
                     && step != ConfigStep::ConfirmRun
@@ -183,7 +182,7 @@ impl TuiApp {
             }
             TuiEvent::Down | TuiEvent::Right => {
                 if options_count > 0 {
-                    self.navigate_selection(1);
+                    self.state.config_wizard.navigate_next();
                 } else if options_count == 0
                     && step != ConfigStep::Summary
                     && step != ConfigStep::ConfirmRun
@@ -193,17 +192,17 @@ impl TuiApp {
             }
             TuiEvent::Enter => {
                 if step == ConfigStep::ConfirmRun {
-                    // 保存配置并处理用户选择
+                    // Save config and handle user selection
                     let selected = self.state.config_wizard.selected_value();
                     if self.state.config_wizard.config_name.is_empty()
                         || !self.state.config_wizard.config_saved
                     {
-                        // 保存配置
+                        // Save config
                         let _ = self.state.config_wizard.save_config();
                     }
 
                     if selected == 0 {
-                        // 选择"是"：运行处理
+                        // Select "yes": run processing
                         let config = self.state.config_wizard.build_config();
                         self.state.result = Some(TuiResult {
                             config,
@@ -211,9 +210,9 @@ impl TuiApp {
                             run_processing: true,
                         });
                         self.should_run_processing = true;
-                        return Ok(false); // 继续事件循环，下一轮会处理
+                        return Ok(false); // Continue event loop, processing will happen next round
                     } else {
-                        // 选择"否"：返回主菜单
+                        // Select "no": return to main menu
                         self.state.current_screen = Screen::MainMenu;
                         self.state.menu_state = crate::tui::state::MenuState::with_count(4);
                         self.reset_wizard_state();
@@ -222,14 +221,14 @@ impl TuiApp {
                 } else if step == ConfigStep::ConfigSelect
                     && !self.state.config_wizard.can_confirm_config_select()
                 {
-                    // 没有配置文件时，忽略 Enter 键（只能按 ESC 返回）
+                    // When no config files exist, ignore Enter key (only ESC can be pressed)
                 } else if step.option_count() > 0 {
                     self.confirm_selection();
                 } else if step.option_count() == 0 && step != ConfigStep::Summary {
                     self.confirm_input();
                 } else if step == ConfigStep::Summary {
                     self.finish_config();
-                    // 不退出，继续事件循环以运行处理
+                    // Don't exit, continue event loop to run processing
                 }
             }
             TuiEvent::Char(c) => {
@@ -274,7 +273,7 @@ impl TuiApp {
             }
             TuiEvent::Tab => {
                 if step.option_count() > 0 {
-                    self.navigate_selection(1);
+                    self.state.config_wizard.navigate_next();
                 }
             }
             TuiEvent::Escape => {
@@ -287,30 +286,30 @@ impl TuiApp {
         Ok(false)
     }
 
-    /// 重置向导状态
+    /// Reset wizard state
     fn reset_wizard_state(&mut self) {
         self.state.config_wizard = ConfigWizardState::new();
         self.state.input_state.clear();
         self.state.result = None;
     }
 
-    /// 处理进度事件
+    /// Handle progress event
     fn handle_progress(&mut self, _event: TuiEvent) -> std::io::Result<bool> {
         Ok(false)
     }
 
-    /// 处理摘要事件
+    /// Handle summary event
     fn handle_summary(&mut self, event: TuiEvent) -> std::io::Result<bool> {
         match event {
             TuiEvent::Enter | TuiEvent::Escape => {
-                // 返回主菜单
+                // Return to main menu
                 self.state.current_screen = Screen::MainMenu;
                 self.state.menu_state = crate::tui::state::MenuState::with_count(4);
                 self.state.progress_state =
                     crate::tui::ProgressState::new(std::sync::Arc::new(ProcessingStats::new()), 0);
                 self.state.summary_state =
                     crate::tui::SummaryState::new(ProcessingStats::new(), Vec::new(), false, None);
-                // 重置向导状态
+                // Reset wizard state
                 self.reset_wizard_state();
             }
             _ => {}
@@ -318,7 +317,7 @@ impl TuiApp {
         Ok(false)
     }
 
-    /// 处理退出确认
+    /// Handle exit confirmation
     fn handle_exit(&mut self, event: TuiEvent) -> std::io::Result<bool> {
         match event {
             TuiEvent::Char('y') | TuiEvent::Char('Y') => return Ok(true),
@@ -331,25 +330,7 @@ impl TuiApp {
         Ok(false)
     }
 
-    /// 导航选择列表
-    fn navigate_selection(&mut self, delta: i32) {
-        let options_count = self.state.config_wizard.option_count();
-
-        if options_count == 0 {
-            return;
-        }
-
-        let current = self.state.config_wizard.selected_value();
-        let new = if delta > 0 {
-            (current + delta as usize) % options_count
-        } else {
-            (current as i32 + delta + options_count as i32) as usize % options_count
-        };
-
-        self.state.config_wizard.set_selected(new);
-    }
-
-    /// 确认选择
+    /// Confirm selection
     fn confirm_selection(&mut self) {
         let step = self.state.config_wizard.step.clone();
         let selected = self.state.config_wizard.selected_value();
@@ -379,24 +360,24 @@ impl TuiApp {
                                 .map(|p| p.display().to_string())
                                 .collect::<Vec<_>>()
                                 .join("; ");
-                            self.state.config_wizard.processing_mode = config.processing_mode;
-                            self.state.config_wizard.classification = config.classification;
-                            self.state.config_wizard.month_format = config.month_format;
-                            self.state.config_wizard.operation = config.operation;
-                            self.state.config_wizard.deduplicate = config.deduplicate;
-                            self.state.config_wizard.dry_run = config.dry_run;
-                            self.state.config_wizard.classify_by_type = config.classify_by_type;
+                            self.state.config_wizard.processing_mode.select(config.processing_mode);
+                            self.state.config_wizard.classification.select(config.classification);
+                            self.state.config_wizard.month_format.select(config.month_format);
+                            self.state.config_wizard.operation.select(config.operation);
+                            self.state.config_wizard.deduplicate.select_by_index(if config.deduplicate { 1 } else { 0 });
+                            self.state.config_wizard.dry_run.select_by_index(if config.dry_run { 1 } else { 0 });
+                            self.state.config_wizard.classify_by_type.select_by_index(if config.classify_by_type { 1 } else { 0 });
                         }
                     }
                 }
-                // 选择配置后，进入确认是否修改配置的步骤
+                // After selecting config, enter confirm whether to modify config step
                 self.state.config_wizard.step = ConfigStep::ConfigConfirm;
-                // 重置选中状态为默认值 "否"（不修改）
+                // Reset selection to default value "no" (don't modify)
                 self.state.config_wizard.set_selected(0);
             }
             ConfigStep::ConfigConfirm => {
                 if selected == 0 {
-                    // 选择"否"：直接运行处理
+                    // Select "no": run processing directly
                     let config = self.state.config_wizard.build_config();
                     self.state.result = Some(TuiResult {
                         config,
@@ -405,27 +386,27 @@ impl TuiApp {
                     });
                     self.should_run_processing = true;
                 } else {
-                    // 选择"是"：进入输入目录步骤进行修改
+                    // Select "yes": enter input directory step to modify
                     self.state.config_wizard.step = ConfigStep::InputDir;
                     self.state.input_state.clear();
                 }
             }
             ConfigStep::Classification => {
                 self.state.config_wizard.set_selected(selected);
-                self.state.config_wizard.step = step.next(self.state.config_wizard.classification);
-                // 重置下一步的布尔选项状态
+                self.state.config_wizard.step = step.next(self.state.config_wizard.classification.selected());
+                // Reset boolean option state for next step
                 self.state.config_wizard.reset_boolean_selection();
             }
             _ => {
                 self.state.config_wizard.set_selected(selected);
-                self.state.config_wizard.step = step.next(self.state.config_wizard.classification);
-                // 重置下一步的布尔选项状态
+                self.state.config_wizard.step = step.next(self.state.config_wizard.classification.selected());
+                // Reset boolean option state for next step
                 self.state.config_wizard.reset_boolean_selection();
             }
         }
     }
 
-    /// 确认输入
+    /// Confirm input
     fn confirm_input(&mut self) {
         let step = self.state.config_wizard.step.clone();
         let value = self.state.input_state.value().to_string();
@@ -433,32 +414,32 @@ impl TuiApp {
         match step {
             ConfigStep::InputDir => {
                 self.state.config_wizard.input_dirs = value;
-                self.state.config_wizard.step = step.next(self.state.config_wizard.classification);
+                self.state.config_wizard.step = step.next(self.state.config_wizard.classification.selected());
                 self.state.input_state.clear();
-                // 重置下一步的布尔选项状态
+                // Reset boolean option state for next step
                 self.state.config_wizard.reset_boolean_selection();
             }
             ConfigStep::OutputDir => {
                 self.state.config_wizard.output_dir = value;
-                self.state.config_wizard.step = step.next(self.state.config_wizard.classification);
+                self.state.config_wizard.step = step.next(self.state.config_wizard.classification.selected());
                 self.state.input_state.clear();
-                // 重置下一步的布尔选项状态
+                // Reset boolean option state for next step
                 self.state.config_wizard.reset_boolean_selection();
             }
             ConfigStep::ExcludeDir => {
                 self.state.config_wizard.exclude_dirs = value;
-                self.state.config_wizard.step = step.next(self.state.config_wizard.classification);
+                self.state.config_wizard.step = step.next(self.state.config_wizard.classification.selected());
                 self.state.input_state.clear();
-                // 重置下一步的布尔选项状态
+                // Reset boolean option state for next step
                 self.state.config_wizard.reset_boolean_selection();
             }
             ConfigStep::ConfigName => {
                 self.state.config_wizard.config_name = value.clone();
                 if self.state.config_wizard.validate(&step).is_ok() {
                     self.state.config_wizard.step =
-                        step.next(self.state.config_wizard.classification);
+                        step.next(self.state.config_wizard.classification.selected());
                     self.state.input_state.clear();
-                    // 重置下一步的布尔选项状态
+                    // Reset boolean option state for next step
                     self.state.config_wizard.reset_boolean_selection();
                 } else {
                     self.state.config_wizard.error_message =
@@ -469,10 +450,10 @@ impl TuiApp {
         }
     }
 
-    /// 完成配置（推进到 ConfirmRun 步骤，除非 skip_confirm_run 为 true）
+    /// Finish configuration (advance to ConfirmRun step, unless skip_confirm_run is true)
     fn finish_config(&mut self) {
         if self.state.config_wizard.skip_confirm_run {
-            // 直接运行处理，跳过确认步骤
+            // Run processing directly, skip confirmation step
             let config = self.state.config_wizard.build_config();
             self.state.result = Some(TuiResult {
                 config,

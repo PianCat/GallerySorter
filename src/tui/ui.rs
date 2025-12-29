@@ -1,6 +1,6 @@
-//! UI渲染模块
+//! UI rendering module
 //!
-//! 包含所有屏幕的渲染逻辑，使用Ratatui最佳实践。
+//! Contains rendering logic for all screens, using Ratatui best practices.
 
 use crate::tui::state::{
     ConfigStep, ConfigWizardState, InputState, MenuItem, MenuState, ProgressState, Screen,
@@ -17,37 +17,37 @@ use ratatui::{
 };
 use rust_i18n::t;
 
-/// TUI运行结果
+/// TUI run result
 #[derive(Debug)]
 pub struct TuiResult {
-    /// 配置
+    /// Configuration
     pub config: crate::config::Config,
-    /// 配置名称
+    /// Configuration name
     pub config_name: Option<String>,
-    /// 是否应在TUI内运行处理
+    /// Whether to run processing within TUI
     pub run_processing: bool,
 }
 
-/// 应用程序状态（包含UI状态）
+/// Application state (contains UI state)
 #[derive(Debug)]
 pub struct AppState {
-    /// 当前屏幕
+    /// Current screen
     pub current_screen: Screen,
-    /// 菜单状态
+    /// Menu state
     pub menu_state: MenuState,
-    /// 配置向导状态
+    /// Configuration wizard state
     pub config_wizard: ConfigWizardState,
-    /// 进度状态
+    /// Progress state
     pub progress_state: ProgressState,
-    /// 摘要状态
+    /// Summary state
     pub summary_state: SummaryState,
-    /// 输入状态
+    /// Input state
     pub input_state: InputState,
-    /// 是否应该退出
+    /// Whether should exit
     pub should_exit: bool,
-    /// TUI运行结果
+    /// TUI run result
     pub result: Option<TuiResult>,
-    /// 选择列表状态（用于配置向导选择）
+    /// Selection list state (for configuration wizard selection)
     pub select_state: ListState,
 }
 
@@ -79,17 +79,17 @@ impl Default for AppState {
     }
 }
 
-/// 在TUI内运行处理
+/// Run processing within TUI
 pub fn run_processing(
     terminal: &mut DefaultTerminal,
     config: crate::config::Config,
     log_path: Option<std::path::PathBuf>,
 ) -> std::io::Result<SummaryState> {
-    // 创建处理器
+    // Create processor
     let mut processor = match crate::process::Processor::new(config.clone()) {
         Ok(p) => p,
         Err(_) => {
-            // 返回包含错误的状态
+            // Return state containing error
             let stats = crate::process::ProcessingStats::new();
             return Ok(SummaryState::new(
                 stats,
@@ -100,63 +100,63 @@ pub fn run_processing(
         }
     };
 
-    // 先获取文件数量用于进度条
+    // First get file count for progress bar
     let total_files = processor.total_files_count().unwrap_or(0);
 
-    // 获取处理器的stats（用于共享）
+    // Get processor stats (for sharing)
     let stats = processor.stats_arc();
 
-    // 使用通道传递当前处理的文件名和完成信号
+    // Use channel to pass current processing file name and completion signal
     let (tx, rx) = std::sync::mpsc::channel::<Result<(), ()>>();
 
-    // 初始化应用状态（用于渲染）
+    // Initialize application state (for rendering)
     let mut state = AppState {
         current_screen: Screen::Progress,
         progress_state: ProgressState::new(stats.clone(), total_files),
         ..Default::default()
     };
 
-    // 初始渲染进度屏幕
+    // Initial render of progress screen
     render(terminal, &mut state)?;
 
-    // 短延时让用户看到进度屏幕
+    // Short delay to let user see progress screen
     std::thread::sleep(std::time::Duration::from_millis(100));
     render(terminal, &mut state)?;
 
-    // 在后台线程中运行处理
+    // Run processing in background thread
     let handle = std::thread::spawn(move || {
-        // 运行处理
+        // Run processing
         let results = processor.run().unwrap_or_default();
         let final_stats = (*processor.stats()).clone();
 
-        // 发送完成信号
+        // Send completion signal
         let _ = tx.send(Ok(()));
 
         (final_stats, results)
     });
 
-    // 定期刷新UI，同时检查是否完成
+    // Periodically refresh UI while checking for completion
     loop {
-        // 检查是否有完成信号
+        // Check for completion signal
         if let Ok(Ok(())) = rx.recv_timeout(std::time::Duration::from_millis(50)) {
-            // 处理完成
+            // Processing complete
             break;
         }
 
-        // 刷新UI - stats 是共享的，会自动反映最新进度
+        // Refresh UI - stats is shared, automatically reflects latest progress
         render(terminal, &mut state)?;
     }
 
-    // 等待线程完成并获取结果
+    // Wait for thread to complete and get results
     let (final_stats, results) = handle.join().unwrap();
 
-    // 创建摘要状态
+    // Create summary state
     let summary_state = SummaryState::new(final_stats, results, config.dry_run, log_path);
 
     Ok(summary_state)
 }
 
-/// 设置全局背景（使用Style）
+/// Set global background (using Style)
 fn set_background(area: Rect, buf: &mut Buffer) {
     let style = Style::new().bg(theme().bg);
     for y in area.y..area.y + area.height {
@@ -168,15 +168,15 @@ fn set_background(area: Rect, buf: &mut Buffer) {
     }
 }
 
-/// 渲染整个应用
+/// Render entire application
 pub fn render(terminal: &mut DefaultTerminal, state: &mut AppState) -> std::io::Result<()> {
     terminal.draw(|frame| draw(frame, frame.area(), state))?;
     Ok(())
 }
 
-/// 主渲染函数
+/// Main render function
 fn draw(frame: &mut Frame, area: Rect, state: &mut AppState) {
-    // 设置全局背景
+    // Set global background
     let buf = frame.buffer_mut();
     set_background(area, buf);
 
@@ -189,7 +189,7 @@ fn draw(frame: &mut Frame, area: Rect, state: &mut AppState) {
     }
 }
 
-/// 绘制主菜单
+/// Draw main menu
 fn draw_main_menu(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let [header, body, footer] = Layout::vertical([
         Constraint::Length(3),
@@ -198,7 +198,7 @@ fn draw_main_menu(frame: &mut Frame, area: Rect, state: &mut AppState) {
     ])
     .areas(area);
 
-    // 标题
+    // Title
     let title = Line::from(" Gallery Sorter ")
         .centered()
         .style(theme().title());
@@ -211,7 +211,7 @@ fn draw_main_menu(frame: &mut Frame, area: Rect, state: &mut AppState) {
 
     frame.render_widget(title_block, header);
 
-    // 菜单列表
+    // Menu list
     let items: Vec<ListItem> = MenuItem::iter()
         .enumerate()
         .map(|(i, item)| {
@@ -236,14 +236,14 @@ fn draw_main_menu(frame: &mut Frame, area: Rect, state: &mut AppState) {
 
     frame.render_stateful_widget(menu_list, body, &mut state.menu_state.list_state);
 
-    // 底部提示
+    // Bottom hint
     let hint = Paragraph::new(t!("menu_hint"))
         .style(theme().hint())
         .alignment(Alignment::Center);
     frame.render_widget(hint, footer);
 }
 
-/// 绘制配置向导
+/// Draw configuration wizard
 fn draw_config_wizard(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let [header, body, footer] = Layout::vertical([
         Constraint::Length(3),
@@ -252,7 +252,7 @@ fn draw_config_wizard(frame: &mut Frame, area: Rect, state: &mut AppState) {
     ])
     .areas(area);
 
-    // 步骤标题
+    // Step title
     let step_title = Line::from(format!(" {} ", state.config_wizard.step.title()))
         .centered()
         .style(theme().title());
@@ -265,7 +265,7 @@ fn draw_config_wizard(frame: &mut Frame, area: Rect, state: &mut AppState) {
 
     frame.render_widget(title_block, header);
 
-    // 根据步骤类型渲染不同内容
+    // Render different content based on step type
     match &state.config_wizard.step {
         step if step.option_count() > 0 => {
             draw_selection_step(frame, body, state);
@@ -282,7 +282,7 @@ fn draw_config_wizard(frame: &mut Frame, area: Rect, state: &mut AppState) {
         _ => {}
     }
 
-    // 底部提示
+    // Bottom hint
     let hint_text = match state.config_wizard.step {
         ConfigStep::InputDir
         | ConfigStep::OutputDir
@@ -299,15 +299,15 @@ fn draw_config_wizard(frame: &mut Frame, area: Rect, state: &mut AppState) {
     frame.render_widget(hint, footer);
 }
 
-/// 绘制选择步骤
+/// Draw selection step
 fn draw_selection_step(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let step = &state.config_wizard.step;
     let selected_idx = state.config_wizard.selected_value();
 
-    // 更新选择状态
+    // Update selection state
     state.select_state.select(Some(selected_idx));
 
-    // 如果是配置选择步骤，显示实际配置文件
+    // If config selection step, show actual config files
     if matches!(step, ConfigStep::ConfigSelect) {
         let configs = &state.config_wizard.available_configs;
         let items: Vec<ListItem> = if configs.is_empty() {
@@ -342,7 +342,7 @@ fn draw_selection_step(frame: &mut Frame, area: Rect, state: &mut AppState) {
 
         frame.render_stateful_widget(list, area, &mut state.select_state);
     } else {
-        // 其他选择步骤使用预定义选项
+        // Other selection steps use predefined options
         let options = step.options();
         let items: Vec<ListItem> = options
             .into_iter()
@@ -366,7 +366,7 @@ fn draw_selection_step(frame: &mut Frame, area: Rect, state: &mut AppState) {
     }
 }
 
-/// 绘制输入步骤
+/// Draw input step
 fn draw_input_step(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let [prompt_area, input_area, error_area] = Layout::vertical([
         Constraint::Length(1),
@@ -375,7 +375,7 @@ fn draw_input_step(frame: &mut Frame, area: Rect, state: &mut AppState) {
     ])
     .areas(area);
 
-    // 如果输入框为空，从wizard状态初始化
+    // If input box is empty, initialize from wizard state
     if state.input_state.buffer.is_empty() {
         let value = match state.config_wizard.step {
             ConfigStep::ConfigName => state.config_wizard.config_name.clone(),
@@ -398,13 +398,13 @@ fn draw_input_step(frame: &mut Frame, area: Rect, state: &mut AppState) {
         _ => String::new(),
     };
 
-    // 提示文本
+    // Prompt text
     let prompt_para = Paragraph::new(prompt)
         .style(theme().hint())
         .alignment(Alignment::Left);
     frame.render_widget(prompt_para, prompt_area);
 
-    // 输入框
+    // Input box
     let input_block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(theme().border());
@@ -415,7 +415,7 @@ fn draw_input_step(frame: &mut Frame, area: Rect, state: &mut AppState) {
 
     frame.render_widget(input_para, input_area);
 
-    // 设置光标位置
+    // Set cursor position
     let cursor_x = input_area.x + 1 + state.input_state.visual_cursor_position() as u16;
     let cursor_y = input_area.y + 1;
     if cursor_x < input_area.x + input_area.width - 1 {
@@ -425,18 +425,18 @@ fn draw_input_step(frame: &mut Frame, area: Rect, state: &mut AppState) {
         });
     }
 
-    // 错误信息
+    // Error message
     if let Some(ref error) = state.config_wizard.error_message {
         let error_line = Line::from(error.as_str()).style(theme().error());
         frame.render_widget(error_line, error_area);
     }
 }
 
-/// 绘制摘要步骤
+/// Draw summary step
 fn draw_summary_step(frame: &mut Frame, area: Rect, wizard: &ConfigWizardState) {
     let config = wizard.build_config();
 
-    // 获取月份格式的中文显示
+    // Get month format display text
     let month_format_text = match config.month_format {
         crate::config::MonthFormat::Nested => t!("month_format_nested"),
         crate::config::MonthFormat::Combined => t!("month_format_combined"),
@@ -489,7 +489,7 @@ fn draw_summary_step(frame: &mut Frame, area: Rect, wizard: &ConfigWizardState) 
     frame.render_widget(table, area);
 }
 
-/// 绘制进度屏幕
+/// Draw progress screen
 fn draw_progress(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let [progress_area, stats_area, file_area, footer] = Layout::vertical([
         Constraint::Length(3),
@@ -499,7 +499,7 @@ fn draw_progress(frame: &mut Frame, area: Rect, state: &mut AppState) {
     ])
     .areas(area);
 
-    // 进度条
+    // Progress bar
     let ratio = state.progress_state.progress_ratio();
     let progress_text = format!(
         "{}/{}",
@@ -519,7 +519,7 @@ fn draw_progress(frame: &mut Frame, area: Rect, state: &mut AppState) {
 
     frame.render_widget(progress, progress_area);
 
-    // 统计信息
+    // Statistics
     let stats = format!(
         "{}: {}  {}: {}  {}: {}  {}: {}",
         t!("stat_processed"),
@@ -534,7 +534,7 @@ fn draw_progress(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let stats_line = Line::from(stats).style(theme().normal());
     frame.render_widget(stats_line, stats_area);
 
-    // 当前文件
+    // Current file
     if !state.progress_state.current_file.is_empty() {
         let current = Line::from(format!(
             "{} {}",
@@ -545,14 +545,14 @@ fn draw_progress(frame: &mut Frame, area: Rect, state: &mut AppState) {
         frame.render_widget(current, file_area);
     }
 
-    // 底部提示
+    // Bottom hint
     let hint = Paragraph::new(t!("processing_hint"))
         .style(theme().hint())
         .alignment(Alignment::Center);
     frame.render_widget(hint, footer);
 }
 
-/// 绘制摘要屏幕
+/// Draw summary screen
 fn draw_summary(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let [header, body, footer] = Layout::vertical([
         Constraint::Length(3),
@@ -561,7 +561,7 @@ fn draw_summary(frame: &mut Frame, area: Rect, state: &mut AppState) {
     ])
     .areas(area);
 
-    // 完成标题
+    // Completion title
     let title = Line::from(format!(" {} ", t!("processing_complete")))
         .centered()
         .style(theme().title());
@@ -573,7 +573,7 @@ fn draw_summary(frame: &mut Frame, area: Rect, state: &mut AppState) {
 
     frame.render_widget(title_block, header);
 
-    // 获取统计值
+    // Get statistics values
     let processed = state
         .summary_state
         .stats
@@ -595,7 +595,7 @@ fn draw_summary(frame: &mut Frame, area: Rect, state: &mut AppState) {
         .failed
         .load(std::sync::atomic::Ordering::Relaxed);
 
-    // 使用强调色创建统计行
+    // Create statistics lines with accent color
     let mut stats_lines = vec![
         Line::from(t!("statistics")).style(theme().title()),
         Line::from(vec![
@@ -621,7 +621,7 @@ fn draw_summary(frame: &mut Frame, area: Rect, state: &mut AppState) {
         ]),
     ];
 
-    // 如果是试运行模式，添加提示
+    // If dry run mode, add hint
     if state.summary_state.dry_run {
         stats_lines.push(Line::from(""));
         stats_lines.push(
@@ -629,7 +629,7 @@ fn draw_summary(frame: &mut Frame, area: Rect, state: &mut AppState) {
         );
     }
 
-    // 如果有失败的文件，显示失败数量
+    // If there are failed files, display failed count
     let failed_count = state
         .summary_state
         .results
@@ -643,7 +643,7 @@ fn draw_summary(frame: &mut Frame, area: Rect, state: &mut AppState) {
         );
     }
 
-    // 显示日志保存路径
+    // Display log save path
     if let Some(ref log_path) = state.summary_state.log_path {
         stats_lines.push(Line::from(""));
         stats_lines.push(
@@ -662,14 +662,14 @@ fn draw_summary(frame: &mut Frame, area: Rect, state: &mut AppState) {
         .style(theme().normal());
     frame.render_widget(stats_para, body);
 
-    // 底部提示
+    // Bottom hint
     let hint = Paragraph::new(t!("summary_hint"))
         .style(theme().hint())
         .alignment(Alignment::Center);
     frame.render_widget(hint, footer);
 }
 
-/// 绘制退出确认
+/// Draw exit confirmation
 fn draw_exit_confirm(frame: &mut Frame, area: Rect) {
     let confirm_text = Line::from(t!("exit_confirm"))
         .centered()
@@ -677,7 +677,7 @@ fn draw_exit_confirm(frame: &mut Frame, area: Rect) {
     frame.render_widget(confirm_text, area);
 }
 
-// 为MenuItem实现iter
+// Implement iter for MenuItem
 impl MenuItem {
     fn iter() -> MenuItemIter {
         MenuItemIter { index: 0 }
