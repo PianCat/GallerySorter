@@ -3,9 +3,6 @@
 #[cfg(windows)]
 pub mod windows;
 
-#[cfg(unix)]
-pub mod unix;
-
 /// Check if the current process has administrator privileges.
 #[cfg(unix)]
 pub fn has_admin_privileges() -> bool {
