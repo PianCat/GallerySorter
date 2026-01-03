@@ -1,9 +1,27 @@
 //! Theme module
 //!
-//! Provides unified theme definition, using Stylize trait for concise style settings.
+//! Provides unified theme definition and TUI configuration constants.
 
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Line;
+
+// ============================================================================
+// TUI Configuration Constants
+// ============================================================================
+
+/// TUI configuration constants
+pub mod config {
+    /// Event polling tick rate in milliseconds
+    pub const TICK_RATE_MS: u64 = 50;
+    /// Number of visible rows in form scrolling
+    pub const FORM_VISIBLE_ROWS: usize = 8;
+    /// Number of items in the main menu
+    pub const MENU_ITEM_COUNT: usize = 4;
+    /// Maximum length for value truncation in forms
+    pub const VALUE_TRUNCATE_LENGTH: usize = 40;
+    /// Highlight symbol for selected items
+    pub const HIGHLIGHT_SYMBOL: &str = "▶ ";
+}
 
 /// Theme color configuration
 #[derive(Debug, Clone, Copy)]

@@ -1,14 +1,15 @@
-//! Display summary module
+//! 汇总显示模块
 //!
-//! Provides summary display functionality after processing completion.
+//! 提供处理完成后的摘要显示。
 
 use crate::process::{FileResult, ProcessingStats, ProcessingStatus};
+use rust_i18n::t;
 use std::sync::atomic::Ordering;
 
-/// Display processing summary
+/// 显示处理摘要
 pub fn display_summary(stats: &ProcessingStats, results: &[FileResult], dry_run: bool) {
     println!("\n{}", "═".repeat(60));
-    println!("{:^60}", "Processing Complete");
+    println!("{:^60}", t!("processing_complete"));
     println!("{}", "═".repeat(60));
 
     let total = stats.total_files.load(Ordering::Relaxed);
@@ -17,22 +18,23 @@ pub fn display_summary(stats: &ProcessingStats, results: &[FileResult], dry_run:
     let duplicates = stats.duplicates.load(Ordering::Relaxed);
     let failed = stats.failed.load(Ordering::Relaxed);
 
-    println!("\n  # Statistics");
+    println!("\n  {}", t!("statistics"));
     println!("  {}", "─".repeat(40));
-    println!("    > Total Files      {}", total);
-    println!("    ✓ Processed        {}", processed);
-    println!("    ○ Skipped          {}", skipped);
-    println!("    ◎ Duplicates       {}", duplicates);
-    println!("    ✗ Failed           {}", failed);
+    println!("    > {}: {}", t!("stat_total"), total);
+    println!("    ✓ {}: {}", t!("stat_processed"), processed);
+    println!("    ○ {}: {}", t!("stat_skipped"), skipped);
+    println!("    ◎ {}: {}", t!("stat_duplicates"), duplicates);
+    println!("    ✗ {}: {}", t!("stat_failed"), failed);
 
-    // Display failed files
     let failed_files: Vec<_> = results
         .iter()
         .filter(|r| r.status == ProcessingStatus::Failed)
         .collect();
 
+    let unknown_error = t!("unknown_error");
+
     if !failed_files.is_empty() {
-        println!("\n  ! Failed Files");
+        println!("\n  {}", t!("failed_files"));
         println!("  {}", "─".repeat(40));
         for (i, result) in failed_files.iter().take(5).enumerate() {
             println!(
@@ -43,24 +45,26 @@ pub fn display_summary(stats: &ProcessingStats, results: &[FileResult], dry_run:
                     .file_name()
                     .unwrap_or_default()
                     .to_string_lossy(),
-                result.error.as_deref().unwrap_or("Unknown error")
+                result.error.as_deref().unwrap_or(unknown_error.as_ref())
             );
         }
         if failed_files.len() > 5 {
-            println!("    and {} more files", failed_files.len() - 5);
+            println!(
+                "    {}",
+                t!("failed_files_more", count = failed_files.len() - 5)
+            );
         }
     }
 
     if dry_run {
-        println!("\n  * Dry run mode (no actual file operations)");
+        println!("\n  {}", t!("dry_run_notice"));
     }
 
     println!("\n{}", "═".repeat(60));
 }
 
-/// Check if interactive mode should be run (when no arguments are provided)
+/// 是否运行交互模式（无参数时启用）
 pub fn should_run_interactive() -> bool {
     let args: Vec<String> = std::env::args().collect();
-    // Only program name, no other arguments
     args.len() == 1
 }

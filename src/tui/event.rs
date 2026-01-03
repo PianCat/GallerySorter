@@ -2,6 +2,7 @@
 //!
 //! Uses crossterm for terminal event handling.
 
+use crate::tui::theme::config::TICK_RATE_MS;
 use crossterm::{
     ExecutableCommand,
     event::{
@@ -10,9 +11,6 @@ use crossterm::{
     },
 };
 use std::time::Duration;
-
-/// Event poll interval (milliseconds)
-const TICK_RATE: u64 = 50;
 
 /// Event type
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,7 +116,7 @@ impl EventPoll {
 
     /// Create default event poller
     pub fn default() -> Self {
-        Self::new(Duration::from_millis(TICK_RATE))
+        Self::new(Duration::from_millis(TICK_RATE_MS))
     }
 
     /// Poll next event
@@ -150,7 +148,7 @@ impl EventPoll {
 
 impl Default for EventPoll {
     fn default() -> Self {
-        Self::new(Duration::from_millis(TICK_RATE))
+        Self::new(Duration::from_millis(TICK_RATE_MS))
     }
 }
 

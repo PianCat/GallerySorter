@@ -1,9 +1,23 @@
 //! Configuration types for the gallery sorter
 
-use crate::tui::state::EnumOption;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+/// 可枚举选项，用于统一选择逻辑。
+pub trait EnumOption: Clone + Copy + Default + PartialEq + 'static {
+    /// 获取当前枚举的索引
+    fn to_index(&self) -> usize;
+
+    /// 根据索引创建枚举（非法索引返回默认值）
+    fn from_index(index: usize) -> Self;
+
+    /// 变体数量
+    fn count() -> usize;
+
+    /// 可用变体列表（支持平台过滤）
+    fn variants() -> &'static [Self];
+}
 
 /// Processing mode for handling files
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, clap::ValueEnum)]
@@ -105,7 +119,11 @@ impl EnumOption for ProcessingMode {
     }
 
     fn variants() -> &'static [Self] {
-        &[ProcessingMode::Full, ProcessingMode::Supplement, ProcessingMode::Incremental]
+        &[
+            ProcessingMode::Full,
+            ProcessingMode::Supplement,
+            ProcessingMode::Incremental,
+        ]
     }
 }
 
@@ -218,7 +236,11 @@ impl EnumOption for FileOperation {
         #[cfg(windows)]
         {
             // Windows: 只显示 3 个选项
-            &[FileOperation::Copy, FileOperation::Move, FileOperation::Hardlink]
+            &[
+                FileOperation::Copy,
+                FileOperation::Move,
+                FileOperation::Hardlink,
+            ]
         }
     }
 }
