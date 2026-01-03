@@ -321,6 +321,9 @@ impl TuiApp {
                         return Ok(false);
                     } else {
                         self.state.config_wizard.step = ConfigStep::ConfirmRun;
+                        if self.state.config_wizard.is_select_config_flow() {
+                            self.state.config_wizard.set_selected(1);
+                        }
                         self.state.config_wizard.ensure_selection();
                     }
                 }
