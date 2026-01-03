@@ -1,5 +1,6 @@
 //! 配置向导渲染
 
+use crate::config::ClassificationRule;
 use crate::tui::components::{render_hint, render_title_block, three_panel_layout, wrap_lines};
 use crate::tui::labels::{
     bool_label, classification_label, file_operation_label, month_format_label,
@@ -239,65 +240,70 @@ fn draw_summary_step(frame: &mut Frame, area: Rect, wizard: &ConfigWizardState) 
     let config = wizard.build_config();
     let value_width = summary_value_width(area);
 
-    let rows = vec![
-        Row::new(vec![
-            Cell::from(t!("summary_input")),
-            Cell::from(wrap_lines(&format_paths(&config.input_dirs), value_width)),
-        ]),
-        Row::new(vec![
-            Cell::from(t!("summary_output")),
-            Cell::from(wrap_lines(
-                &config.output_dir.display().to_string(),
-                value_width,
-            )),
-        ]),
-        Row::new(vec![
-            Cell::from(t!("summary_mode")),
-            Cell::from(wrap_lines(
-                processing_mode_label(config.processing_mode).as_ref(),
-                value_width,
-            )),
-        ]),
-        Row::new(vec![
-            Cell::from(t!("summary_classify")),
-            Cell::from(wrap_lines(
-                classification_label(config.classification).as_ref(),
-                value_width,
-            )),
-        ]),
-        Row::new(vec![
+    let mut rows = Vec::new();
+    rows.push(Row::new(vec![
+        Cell::from(t!("summary_input")),
+        Cell::from(wrap_lines(&format_paths(&config.input_dirs), value_width)),
+    ]));
+    rows.push(Row::new(vec![
+        Cell::from(t!("summary_output")),
+        Cell::from(wrap_lines(
+            &config.output_dir.display().to_string(),
+            value_width,
+        )),
+    ]));
+    rows.push(Row::new(vec![
+        Cell::from(t!("summary_exclude")),
+        Cell::from(wrap_lines(&format_paths(&config.exclude_dirs), value_width)),
+    ]));
+    rows.push(Row::new(vec![
+        Cell::from(t!("summary_mode")),
+        Cell::from(wrap_lines(
+            processing_mode_label(config.processing_mode).as_ref(),
+            value_width,
+        )),
+    ]));
+    rows.push(Row::new(vec![
+        Cell::from(t!("summary_classify")),
+        Cell::from(wrap_lines(
+            classification_label(config.classification).as_ref(),
+            value_width,
+        )),
+    ]));
+    if config.classification == ClassificationRule::YearMonth {
+        rows.push(Row::new(vec![
             Cell::from(t!("summary_month_format")),
             Cell::from(wrap_lines(
                 month_format_label(config.month_format).as_ref(),
                 value_width,
             )),
-        ]),
-        Row::new(vec![
-            Cell::from(t!("summary_operation")),
-            Cell::from(wrap_lines(
-                file_operation_label(config.operation).as_ref(),
-                value_width,
-            )),
-        ]),
-        Row::new(vec![
-            Cell::from(t!("summary_deduplicate")),
-            Cell::from(wrap_lines(
-                bool_label(config.deduplicate).as_ref(),
-                value_width,
-            )),
-        ]),
-        Row::new(vec![
-            Cell::from(t!("summary_dry_run")),
-            Cell::from(wrap_lines(bool_label(config.dry_run).as_ref(), value_width)),
-        ]),
-        Row::new(vec![
-            Cell::from(t!("summary_classify_by_type")),
-            Cell::from(wrap_lines(
-                bool_label(config.classify_by_type).as_ref(),
-                value_width,
-            )),
-        ]),
-    ];
+        ]));
+    }
+    rows.push(Row::new(vec![
+        Cell::from(t!("summary_classify_by_type")),
+        Cell::from(wrap_lines(
+            bool_label(config.classify_by_type).as_ref(),
+            value_width,
+        )),
+    ]));
+    rows.push(Row::new(vec![
+        Cell::from(t!("summary_operation")),
+        Cell::from(wrap_lines(
+            file_operation_label(config.operation).as_ref(),
+            value_width,
+        )),
+    ]));
+    rows.push(Row::new(vec![
+        Cell::from(t!("summary_deduplicate")),
+        Cell::from(wrap_lines(
+            bool_label(config.deduplicate).as_ref(),
+            value_width,
+        )),
+    ]));
+    rows.push(Row::new(vec![
+        Cell::from(t!("summary_dry_run")),
+        Cell::from(wrap_lines(bool_label(config.dry_run).as_ref(), value_width)),
+    ]));
 
     let table = Table::new(rows, [Constraint::Length(15), Constraint::Fill(1)])
         .block(
