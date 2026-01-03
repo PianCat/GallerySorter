@@ -5,12 +5,7 @@
 use crate::tui::screens;
 use crate::tui::state::{AppState, ProgressState, Screen, SummaryState};
 use crate::tui::theme::theme;
-use ratatui::{
-    DefaultTerminal, Frame,
-    buffer::Buffer,
-    layout::Rect,
-    style::Style,
-};
+use ratatui::{DefaultTerminal, Frame, buffer::Buffer, layout::Rect, style::Style};
 
 /// 在 TUI 内执行处理流程
 pub fn run_processing(

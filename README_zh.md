@@ -2,62 +2,35 @@
 
 **[English](README.md)** | 中文文档
 
-一个照片和视频整理命令行工具，基于文件创建时间进行分类。使用 Rust 构建，具有高性能和高可靠性。
+Gallery Sorter 是一个结合 CLI 与 TUI 的照片/视频整理工具，基于创建时间自动归档。程序会依次尝试 EXIF、视频元数据（FFprobe）、文件名和文件系统时间，并将文件整理为清晰的目录结构。
 
-## 功能特性
+## 功能亮点
 
-- **智能时间提取**：从多个来源自动提取创建时间，按优先级依次尝试：
-  1. EXIF 元数据（适用于图片：JPEG、PNG、HEIC、HEIF、AVIF、TIFF、RAW 格式）
-  2. 视频元数据（通过 FFprobe，适用于：MP4、MOV、AVI、MKV 等）
-  3. 文件名解析（如 `IMG_20241005_182840.jpg`）
-  4. 文件系统修改时间（最后备选）
-
-- **智能去重**：使用 xxHash (xxh3) 进行快速内容哈希去重。发现重复文件时，自动保留文件名最简洁的版本。
-
-- **灵活的分类方式**：
-  - 仅按年份分类（`2024/`）
-  - 按年月嵌套分类（`2024/10/`）
-  - 按年月组合分类（`2024-10/`）
-  - 不分类（平铺结构）
-
-- **三种处理模式**：
-  - **增量模式**（默认）：只处理比目标目录中最新文件更新的文件。适合日常照片导入。
-  - **补充模式**：处理所有源文件，但跳过目标目录中已存在的相同内容文件。
-  - **完整模式**：处理所有文件，覆盖目标目录中的现有文件。
-
-- **高性能**：
-  - 可配置线程数的并行处理
-  - 大文件高效缓冲 I/O
-  - 大文件采用采样哈希（阈值可配置）
-
-- **交互式和命令行双模式**：
-  - 基于 Ratatui 的交互式 TUI 向导，适合首次使用
-  - 完整的命令行支持，可配合配置文件实现自动化
-
-- **双语支持**：支持中文和英文界面
-
-- **高级配置**：
-  - 从扫描中排除特定目录
-  - 可自定义文件扩展名列表
-  - 可配置增量处理状态文件
+- 多来源时间提取（EXIF → FFprobe → 文件名 → 文件系统时间）
+- 使用 xxHash (xxh3) 的高速去重
+- 灵活的分类方式：无分类/按年/按年月，月份支持嵌套或组合格式
+- 处理模式：增量（默认）、补充、完整
+- 并行处理、可配置线程数与试运行模式
+- Ratatui 交互向导 + 完整 CLI 自动化
+- 中英文双语界面
 
 ## 安装
 
-### 从 Github Releases 下载
+### 从 Releases 下载
 
-从 [GitHub Releases](https://github.com/PianCat/GallerySorter/releases) 页面下载最新版本。选择适合您操作系统的二进制文件（Windows、macOS、Linux）。
+从 [GitHub Releases](https://github.com/PianCat/GallerySorter/releases) 下载最新二进制文件。
 
-### 可选：安装 FFprobe 以支持视频元数据
+### 可选：安装 FFprobe（视频元数据）
 
-如需提取视频元数据，请安装 FFprobe：
+如需提取视频元数据，请安装 FFprobe（FFmpeg 自带）：
 
-- **Windows**：从 [FFmpeg 官网](https://ffmpeg.org/download.html) 下载，添加到 PATH
-- **macOS**：`brew install ffmpeg`
-- **Linux**：`apt install ffmpeg` 或相应包管理器命令
+- Windows：从 https://ffmpeg.org/download.html 下载并加入 PATH
+- macOS：`brew install ffmpeg`
+- Linux：`apt install ffmpeg` 或对应包管理器命令
 
 ### 从源码编译
 
-需要 Rust 2024 版本或更高版本。
+需要 Rust 2024 版本。
 
 ```bash
 git clone https://github.com/PianCat/GallerySorter.git
@@ -65,31 +38,29 @@ cd GallerySorter/GallerySorter_RS
 cargo build --release
 ```
 
-编译后的程序位于 `target/release/gallery-sorter`（Windows 上为 `gallery-sorter.exe`）。
+可执行文件位于 `target/release/gallery-sorter`（Windows 为 `gallery-sorter.exe`）。
 
 ## 使用方法
 
-### 交互式模式
+### TUI 模式
 
-直接运行程序（不带参数）：
+不带参数运行即可启动 Ratatui 向导：
 
 ```bash
-./gallery-sorter
+gallery-sorter
 ```
 
-这将启动交互式 TUI 配置向导。
-
-### 命令行模式
+### CLI 模式
 
 ```bash
 # 基本用法
-./gallery-sorter -i /path/to/photos -o /path/to/sorted
+gallery-sorter -i /path/to/photos -o /path/to/sorted
 
-# 使用配置文件
-./gallery-sorter -C MyConfig
+# 使用配置文件（解析自 Config/Name.toml）
+gallery-sorter -C Name
 
-# 完整参数示例
-./gallery-sorter \
+# 完整示例
+gallery-sorter \
   -i /path/to/photos \
   -i /path/to/more/photos \
   -o /path/to/sorted \
@@ -105,192 +76,86 @@ cargo build --release
 
 | 参数 | 简写 | 说明 |
 |------|------|------|
-| `--config` | `-C` | 配置文件路径（TOML 格式） |
-| `--input` | `-i` | 输入目录（可指定多个） |
+| `--config` | `-C` | 配置文件路径或名称（TOML） |
+| `--input` | `-i` | 输入目录（可多次指定） |
 | `--output` | `-o` | 输出目录 |
-| `--mode` | `-M` | 处理模式：`full`、`supplement`、`incremental` |
-| `--classify` | `-c` | 分类规则：`none`、`year`、`year-month` |
-| `--month-format` | `-m` | 月份格式：`nested`、`combined` |
-| `--classify-by-type` | | 按文件类型分类（添加 Photos/Videos/RAW 子目录） |
-| `--operation` | `-O` | 文件操作：`copy`、`move`、`hardlink`、`symlink` |
-| `--no-deduplicate` | | 禁用文件去重 |
-| `--state-file` | | 增量处理状态文件路径 |
-| `--threads` | `-t` | 并行处理的线程数（0 = 自动） |
-| `--large-file-mb` | | 大文件阈值（MB，超过此大小的文件使用采样哈希） |
-| `--dry-run` | `-n` | 预览模式，显示操作但不执行 |
+| `--mode` | `-M` | `full`、`supplement`、`incremental` |
+| `--classify` | `-c` | `none`、`year`、`year-month` |
+| `--month-format` | `-m` | `nested`、`combined` |
+| `--classify-by-type` |  | 添加 `Photos/Videos/Raw` 子目录 |
+| `--operation` | `-O` | `copy`、`move`、`hardlink`、`symlink` |
+| `--no-deduplicate` |  | 禁用去重 |
+| `--state-file` |  | 增量模式状态文件路径 |
+| `--threads` | `-t` | 线程数（0 = 自动） |
+| `--large-file-mb` |  | 大文件阈值（MB） |
+| `--dry-run` | `-n` | 试运行，仅预览 |
 | `--verbose` | `-v` | 详细输出 |
-| `--json-log` | | 以 JSON 格式输出日志 |
+| `--json-log` |  | JSON 日志 |
 
 ## 配置文件
 
-将配置文件放在程序同目录下的 `Config/` 文件夹中，使用 `.toml` 格式。
+配置文件会从可执行文件同级的 `Config/` 目录读取。仓库中的 `Template.toml` 可作为模板，保存为 `Config/Name.toml`。
 
-### 示例：Config/Template.toml
+CLI 参数会覆盖配置文件中的设置。
+
+示例：
 
 ```toml
-# Gallery Sorter 配置文件
-
-# 要扫描的输入目录
-input_dirs = [
-    "D:/Photos",
-    "D:/Videos",
-]
-
-# 输出目录
+input_dirs = ["D:/Photos", "D:/Videos"]
 output_dir = "D:/Sorted"
-
-# 要从扫描中排除的目录
-# 可以是绝对路径或文件夹名称（将匹配任何同名的文件夹）
-exclude_dirs = [
-    ".sync",
-    ".thumbnails",
-    "@eaDir",
-]
-
-# 处理模式："full"、"supplement" 或 "incremental"
 processing_mode = "incremental"
-
-# 分类规则："none"、"year" 或 "year-month"
 classification = "year-month"
-
-# 月份格式："nested" 或 "combined"
 month_format = "nested"
-
-# 按文件类型分类（在时间目录后添加 Photos/Videos 子目录，RAW 文件嵌套在 Photos/Raw 下）
 classify_by_type = false
-
-# 文件操作："copy"、"move"、"symlink" 或 "hardlink"
 operation = "copy"
-
-# 启用文件去重
 deduplicate = true
-
-# 增量处理状态文件路径
-# state_file = ".gallery_sorter_state.json"
-
-# 并行处理的线程数（0 = 自动检测）
-threads = 0
-
-# 大文件阈值（字节），超过此大小的文件使用采样哈希
-# 默认值：100MB = 104857600 字节
-large_file_threshold = 104857600
-
-# 预览模式
 dry_run = false
-
-# 详细输出
 verbose = false
-
-# 支持的文件扩展名（可根据需要自定义）
-image_extensions = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "avif", "tiff", "tif"]
-video_extensions = ["mp4", "mov", "avi", "mkv", "wmv", "flv", "m4v", "3gp"]
-raw_extensions = ["raw", "arw", "cr2", "cr3", "nef", "orf", "rw2", "dng", "raf", "srw", "pef"]
 ```
 
-使用方法：`./gallery-sorter -C Template`
+运行方式：
 
-## 处理模式详解
-
-### 增量模式（默认）
-
-适用于日常从相机/手机导入照片：
-
-1. 扫描输出目录，找到最新文件的时间戳（水位线）
-2. 只处理时间戳比水位线新的源文件
-3. 跳过目标目录中已存在相同内容的文件
-4. 对于同名但内容不同的文件，添加数字后缀（`_1`、`_2`）
-
-### 补充模式
-
-适用于合并照片集合：
-
-1. 处理所有源文件
-2. 将内容哈希与目标目录中的现有文件进行比较
-3. 跳过已存在相同内容的文件
-4. 对于同名但内容不同的文件，添加数字后缀
-
-### 完整模式
-
-适用于首次整理或重新整理：
-
-1. 处理所有源文件
-2. 覆盖目标目录中的现有文件
-3. 请谨慎使用 - 可能会覆盖文件！
-
-## 重复文件处理
-
-当检测到重复文件（相同内容哈希）时：
-
-1. **源文件之间**：保留文件名最简洁的文件（最短，不含 `_1`、` - 副本`、`(1)` 等复制标记）
-2. **与目标文件比较**：行为取决于处理模式（见上文）
-
-识别的重复标记：
-- 数字后缀：`_1`、`_2`、` 1`、` 2`
-- 括号：`(1)`、`(2)`
-- 复制关键词：`- copy`、`- 副本`
-
-## 支持的格式
-
-### 图片（支持 EXIF 提取）
-`jpg`、`jpeg`、`png`、`webp`、`heic`、`heif`、`avif`、`tiff`、`tif`、`gif`、`bmp`
-
-### RAW 格式
-`raw`、`arw`、`cr2`、`cr3`、`nef`、`orf`、`rw2`、`dng`、`raf`、`srw`、`pef`
-
-### 视频（通过 FFprobe 提取元数据）
-`mp4`、`mov`、`avi`、`mkv`、`wmv`、`flv`、`m4v`、`3gp`
-
-## 输出目录结构
-
-默认结构（classify_by_type = false）：
+```bash
+gallery-sorter -C Name
 ```
-输出目录/
-├── .gallery_sorter_increment_metadata.toml  # 水位线文件（增量模式）
-├── .gallery_sorter_state.json               # 状态文件（增量模式）
+
+## 输出结构
+
+默认（按年月、嵌套）：
+
+```
+Output/
 ├── 2024/
-│   ├── 01/
-│   │   ├── IMG_20240115_143022.jpg
-│   │   └── VID_20240120_183045.mp4
-│   └── 02/
-│       └── DSC_0001.jpg
+│   └── 01/
+│       ├── IMG_20240115_143022.jpg
+│       └── VID_20240120_183045.mp4
 └── 2023/
     └── 12/
         └── photo.heic
 ```
 
-启用文件类型分类后（classify_by_type = true）：
+启用文件类型分类：
+
 ```
-输出目录/
-├── 2024/
-│   └── 01/
-│       ├── Photos/
-│       │   ├── IMG_20240115_143022.jpg
-│       │   └── Raw/
-│       │       └── DSC_0001.arw
-│       └── Videos/
-│           └── VID_20240120_183045.mp4
+Output/
+└── 2024/
+    └── 01/
+        ├── Photos/
+        │   ├── IMG_20240115_143022.jpg
+        │   └── Raw/
+        │       └── DSC_0001.arw
+        └── Videos/
+            └── VID_20240120_183045.mp4
 ```
 
-## 日志文件
+## 日志
 
-日志文件保存在程序同目录下的 `Log/` 文件夹中：
-- 交互式模式：`Log/Interactive_YYYYMMDD_HHMMSS.log`
-- 使用配置文件的命令行模式：`Log/配置名称/配置名称_YYYYMMDD_HHMMSS.log`
-- 不使用配置文件的命令行模式：`Log/CLIRun_YYYYMMDD_HHMMSS.log`
+日志保存在可执行文件同级的 `Log/` 目录：
 
-## 性能优化建议
-
-1. **使用增量模式** 进行日常导入 - 它会跳过对旧文件的时间戳比较
-2. **使用硬链接操作** 在同一文件系统上节省磁盘空间
-3. **禁用去重** 如果确定没有重复文件（可加快处理速度）
-4. **先使用预览模式** 在实际处理前预览更改
-5. **根据 CPU 核心数调整线程数** 以获得最佳性能
-6. **针对 SSD 提高大文件阈值**，针对 HDD 降低阈值
+- TUI：`Log/Interactive_YYYYMMDD_HHMMSS.log`
+- CLI（配置文件）：`Log/ConfigName/ConfigName_YYYYMMDD_HHMMSS.log`
+- CLI（无配置）：`Log/CLIRun_YYYYMMDD_HHMMSS.log`
 
 ## 许可证
 
-MIT 许可证 - 详见 LICENSE 文件。
-
-## 参与贡献
-
-欢迎贡献！请随时提交 Issue 和 Pull Request。
+GPL-3.0，详见 `LICENSE`。

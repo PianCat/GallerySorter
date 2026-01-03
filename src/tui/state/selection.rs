@@ -29,7 +29,11 @@ pub trait Selectable {
             return;
         }
         if let Some(i) = self.list_state().selected() {
-            let prev = if i == 0 { count.saturating_sub(1) } else { i - 1 };
+            let prev = if i == 0 {
+                count.saturating_sub(1)
+            } else {
+                i - 1
+            };
             self.list_state_mut().select(Some(prev));
         }
     }

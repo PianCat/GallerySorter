@@ -150,8 +150,6 @@ impl Cli {
         }
         if let Some(mode) = self.mode {
             config.processing_mode = mode;
-        } else {
-            config.processing_mode = ProcessingMode::Full;
         }
         if let Some(classify) = self.classify {
             config.classification = classify;

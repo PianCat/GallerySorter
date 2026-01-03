@@ -295,12 +295,10 @@ impl TuiApp {
                             self.state.config_wizard.error_message =
                                 self.state.config_wizard.validate_form().err();
                         }
-                    } else {
-                        if let Some(field) = self.state.config_wizard.selected_form_field() {
-                            if field.is_input_field() {
-                                self.state.config_wizard.enter_input_mode_for_field();
-                            }
-                        }
+                    } else if let Some(field) = self.state.config_wizard.selected_form_field()
+                        && field.is_input_field()
+                    {
+                        self.state.config_wizard.enter_input_mode_for_field();
                     }
                 }
                 ConfigStep::Summary => {
@@ -378,9 +376,6 @@ impl TuiApp {
                             }
                         }
                         ConfigStep::ConfigSelect | ConfigStep::ConfigName => {
-                            reset_to_main_menu(&mut self.state);
-                        }
-                        _ => {
                             reset_to_main_menu(&mut self.state);
                         }
                     }

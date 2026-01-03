@@ -95,10 +95,7 @@ pub fn run_as_admin(args: &[String]) -> io::Result<()> {
     if result as i32 > 32 {
         Ok(())
     } else {
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            "Failed to request elevation",
-        ))
+        Err(io::Error::other("Failed to request elevation"))
     }
 }
 

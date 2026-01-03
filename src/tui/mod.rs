@@ -17,8 +17,7 @@ pub use display::{display_summary, should_run_interactive};
 pub use event::{EventPoll, TuiEvent};
 pub use state::{
     AppState, ConfigFormState, ConfigStep, ConfigWizardState, FormField, InputState, MenuItem,
-    MenuState, ProgressState, Screen, SelectionState, SummaryState, TuiResult,
-    reset_to_main_menu,
+    MenuState, ProgressState, Screen, SelectionState, SummaryState, TuiResult, reset_to_main_menu,
 };
 pub use theme::{Theme, theme};
 pub use ui::{render, run_processing};

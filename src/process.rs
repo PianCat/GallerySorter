@@ -1186,7 +1186,7 @@ mod tests {
 
     #[test]
     fn test_filename_priority_sorting() {
-        let mut files = vec![
+        let mut files = [
             PathBuf::from("IMG_20251006_180519 - 副本.jpg"),
             PathBuf::from("IMG_20251006_180519.jpg"),
             PathBuf::from("IMG_20251006_180527_2.jpg"),

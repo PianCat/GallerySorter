@@ -207,21 +207,27 @@ fn run_cli_mode() -> Result<()> {
     // Determine log file path based on config file or timestamp
     let log_path = get_log_path(&exe_dir, &cli);
 
+    // 先加载配置以决定日志级别
+    let (config, config_path) = load_config(&cli, &exe_dir)?;
+
     // Setup logging
-    let _guard = setup_logging(&cli, &log_path)?;
+    let _guard = setup_logging(&cli, &config, &log_path)?;
 
     info!(
         version = env!("CARGO_PKG_VERSION"),
         "Gallery Sorter starting"
     );
 
-    // Load configuration
-    let config = load_config(&cli, &exe_dir)?;
+    if let Some(path) = config_path.as_ref() {
+        info!(config_file = %path.display(), "Configuration loaded from file");
+    }
 
-    // Log configuration
-    if cli.verbose {
+    let verbose = cli.verbose || config.verbose;
+    if verbose {
         info!(?config, "Configuration loaded");
     }
+
+    let dry_run = config.dry_run;
 
     // Log to file location
     info!(log_file = %log_path.display(), "Log file location");
@@ -268,7 +274,7 @@ fn run_cli_mode() -> Result<()> {
             let unknown_error = t!("unknown_error");
 
             // Print detailed results if verbose
-            if cli.verbose {
+            if verbose {
                 print_separator();
                 print_hint(&t!("cli_detailed_results"));
                 print_blank();
@@ -360,7 +366,7 @@ fn run_cli_mode() -> Result<()> {
                 }
             }
 
-            if cli.dry_run {
+            if dry_run {
                 print_separator();
                 print_warning(&t!("cli_dry_run_notice"));
             }
@@ -436,47 +442,33 @@ fn resolve_config_path(exe_dir: &Path, config_path: &Path) -> PathBuf {
     config_path.to_path_buf()
 }
 
-/// Load configuration from file or CLI arguments
-fn load_config(cli: &Cli, exe_dir: &Path) -> Result<Config> {
-    let config = if let Some(ref config_path) = cli.config {
+/// 加载配置并返回解析结果与配置文件路径（如有）
+fn load_config(cli: &Cli, exe_dir: &Path) -> Result<(Config, Option<PathBuf>)> {
+    let (config, config_path) = if let Some(ref config_path) = cli.config {
         let resolved_path = resolve_config_path(exe_dir, config_path);
-        info!(config_file = %resolved_path.display(), "Loading configuration from file");
         let file_config = Config::load_from_file(&resolved_path)?;
-        cli.merge_with_config(file_config)
+        (cli.merge_with_config(file_config), Some(resolved_path))
     } else {
-        cli.to_config()
+        (cli.to_config(), None)
     };
 
     if config.input_dirs.is_empty() {
         anyhow::bail!("{}", t!("cli_no_input_dirs_error"));
     }
 
-    Ok(config)
+    Ok((config, config_path))
 }
 
 /// Setup logging for CLI mode (file + console)
-fn setup_logging(cli: &Cli, log_path: &Path) -> Result<Option<WorkerGuard>> {
-    let level = if cli.verbose {
-        Level::DEBUG
-    } else {
-        Level::INFO
-    };
+fn setup_logging(cli: &Cli, config: &Config, log_path: &Path) -> Result<WorkerGuard> {
+    let verbose = cli.verbose || config.verbose;
+    let level = if verbose { Level::DEBUG } else { Level::INFO };
 
     let env_filter = EnvFilter::builder()
         .with_default_directive(level.into())
         .from_env_lossy();
 
-    if let Some(parent) = log_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(log_path)?;
-
-    let (non_blocking, guard) = tracing_appender::non_blocking(file);
+    let (non_blocking, guard) = create_log_writer(log_path)?;
 
     let subscriber = tracing_subscriber::registry().with(env_filter);
 
@@ -497,15 +489,29 @@ fn setup_logging(cli: &Cli, log_path: &Path) -> Result<Option<WorkerGuard>> {
             .init();
     }
 
-    Ok(Some(guard))
+    Ok(guard)
 }
 
 /// Setup logging for interactive mode (file only, no console)
-fn setup_file_only_logging(log_path: &Path) -> Result<Option<WorkerGuard>> {
+fn setup_file_only_logging(log_path: &Path) -> Result<WorkerGuard> {
     let env_filter = EnvFilter::builder()
         .with_default_directive(Level::INFO.into())
         .from_env_lossy();
 
+    let (non_blocking, guard) = create_log_writer(log_path)?;
+
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt::layer().with_ansi(false).with_writer(non_blocking))
+        .init();
+
+    Ok(guard)
+}
+
+/// 创建日志输出并确保目录存在
+fn create_log_writer(
+    log_path: &Path,
+) -> Result<(tracing_appender::non_blocking::NonBlocking, WorkerGuard)> {
     if let Some(parent) = log_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -516,18 +522,11 @@ fn setup_file_only_logging(log_path: &Path) -> Result<Option<WorkerGuard>> {
         .truncate(true)
         .open(log_path)?;
 
-    let (non_blocking, guard) = tracing_appender::non_blocking(file);
-
-    tracing_subscriber::registry()
-        .with(env_filter)
-        .with(fmt::layer().with_ansi(false).with_writer(non_blocking))
-        .init();
-
-    Ok(Some(guard))
+    Ok(tracing_appender::non_blocking(file))
 }
 
 /// Validate configuration before processing
-fn validate_config(config: &gallery_sorter::Config) -> Result<()> {
+fn validate_config(config: &Config) -> Result<()> {
     for input_dir in &config.input_dirs {
         if !input_dir.exists() {
             eprintln!("{} {}", t!("cli_input_dir_not_exist"), input_dir.display());

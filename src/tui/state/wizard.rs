@@ -289,7 +289,9 @@ impl FormField {
             }
             FormField::MonthFormat => month_format_label(state.month_format.selected()).to_string(),
             FormField::ClassifyByType => bool_label(state.classify_by_type.value()).to_string(),
-            FormField::FileOperation => file_operation_label(state.operation.selected()).to_string(),
+            FormField::FileOperation => {
+                file_operation_label(state.operation.selected()).to_string()
+            }
             FormField::Deduplication => bool_label(state.deduplicate.value()).to_string(),
             FormField::DryRun => bool_label(state.dry_run.value()).to_string(),
         }

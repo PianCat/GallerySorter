@@ -6,10 +6,7 @@ use crate::tui::labels::{
     processing_mode_label,
 };
 use crate::tui::state::{AppState, ConfigStep, ConfigWizardState};
-use crate::tui::theme::{
-    config::HIGHLIGHT_SYMBOL,
-    theme,
-};
+use crate::tui::theme::{config::HIGHLIGHT_SYMBOL, theme};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Layout, Rect},
@@ -227,7 +224,9 @@ fn draw_confirm_run_step(frame: &mut Frame, area: Rect, state: &mut AppState) {
 
     let list = List::new(items)
         .block(
-            Block::bordered().title(title).border_type(BorderType::Rounded),
+            Block::bordered()
+                .title(title)
+                .border_type(BorderType::Rounded),
         )
         .highlight_style(theme().selected())
         .highlight_symbol(HIGHLIGHT_SYMBOL);
@@ -255,49 +254,46 @@ fn draw_summary_step(frame: &mut Frame, area: Rect, wizard: &ConfigWizardState) 
         Row::new(vec![
             Cell::from(t!("summary_mode")),
             Cell::from(wrap_lines(
-                &processing_mode_label(config.processing_mode).to_string(),
+                processing_mode_label(config.processing_mode).as_ref(),
                 value_width,
             )),
         ]),
         Row::new(vec![
             Cell::from(t!("summary_classify")),
             Cell::from(wrap_lines(
-                &classification_label(config.classification).to_string(),
+                classification_label(config.classification).as_ref(),
                 value_width,
             )),
         ]),
         Row::new(vec![
             Cell::from(t!("summary_month_format")),
             Cell::from(wrap_lines(
-                &month_format_label(config.month_format).to_string(),
+                month_format_label(config.month_format).as_ref(),
                 value_width,
             )),
         ]),
         Row::new(vec![
             Cell::from(t!("summary_operation")),
             Cell::from(wrap_lines(
-                &file_operation_label(config.operation).to_string(),
+                file_operation_label(config.operation).as_ref(),
                 value_width,
             )),
         ]),
         Row::new(vec![
             Cell::from(t!("summary_deduplicate")),
             Cell::from(wrap_lines(
-                &bool_label(config.deduplicate).to_string(),
+                bool_label(config.deduplicate).as_ref(),
                 value_width,
             )),
         ]),
         Row::new(vec![
             Cell::from(t!("summary_dry_run")),
-            Cell::from(wrap_lines(
-                &bool_label(config.dry_run).to_string(),
-                value_width,
-            )),
+            Cell::from(wrap_lines(bool_label(config.dry_run).as_ref(), value_width)),
         ]),
         Row::new(vec![
             Cell::from(t!("summary_classify_by_type")),
             Cell::from(wrap_lines(
-                &bool_label(config.classify_by_type).to_string(),
+                bool_label(config.classify_by_type).as_ref(),
                 value_width,
             )),
         ]),

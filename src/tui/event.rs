@@ -114,11 +114,6 @@ impl EventPoll {
         Self { tick_rate }
     }
 
-    /// Create default event poller
-    pub fn default() -> Self {
-        Self::new(Duration::from_millis(TICK_RATE_MS))
-    }
-
     /// Poll next event
     pub fn next(&self) -> TuiEvent {
         if event::poll(self.tick_rate).unwrap_or(false) {
