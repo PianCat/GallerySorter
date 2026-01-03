@@ -49,20 +49,10 @@ mod cli_output {
         let _ = stdout().execute(Print(&format!("{}\n", "─".repeat(60))));
     }
 
-    /// Print a centered title
+    /// Print a title
     pub fn print_title(title: &str) {
-        let width = 60;
-        let padding = (width - title.len()) / 2;
-        let left_pad = " ".repeat(padding.saturating_sub(1));
-
-        let _ = stdout().execute(Print(&format!(
-            "{}{} {}{}\n",
-            left_pad,
-            "╔".bold().stylize(),
-            title.bold().stylize(),
-            "╗".bold().stylize(),
-        )));
-        let _ = stdout().execute(Print("\n"));
+        let _ = stdout().execute(Print(title.bold().stylize()));
+        let _ = stdout().execute(Print("\n\n"));
     }
 
     /// Print warning message
@@ -462,30 +452,46 @@ fn load_config(cli: &Cli, exe_dir: &Path) -> Result<(Config, Option<PathBuf>)> {
 /// Setup logging for CLI mode (file + console)
 fn setup_logging(cli: &Cli, config: &Config, log_path: &Path) -> Result<WorkerGuard> {
     let verbose = cli.verbose || config.verbose;
-    let level = if verbose { Level::DEBUG } else { Level::INFO };
+    let file_level = if verbose { Level::DEBUG } else { Level::INFO };
+    let console_level = Level::WARN;
 
-    let env_filter = EnvFilter::builder()
-        .with_default_directive(level.into())
+    let file_filter = EnvFilter::builder()
+        .with_default_directive(file_level.into())
+        .from_env_lossy();
+    let console_filter = EnvFilter::builder()
+        .with_default_directive(console_level.into())
         .from_env_lossy();
 
     let (non_blocking, guard) = create_log_writer(log_path)?;
 
-    let subscriber = tracing_subscriber::registry().with(env_filter);
-
     if cli.json_log {
-        subscriber
+        tracing_subscriber::registry()
             .with(
                 fmt::layer()
                     .json()
                     .with_ansi(false)
-                    .with_writer(non_blocking),
+                    .with_writer(non_blocking)
+                    .with_filter(file_filter),
             )
-            .with(fmt::layer().with_writer(std::io::stderr))
+            .with(
+                fmt::layer()
+                    .with_writer(std::io::stderr)
+                    .with_filter(console_filter),
+            )
             .init();
     } else {
-        subscriber
-            .with(fmt::layer().with_ansi(false).with_writer(non_blocking))
-            .with(fmt::layer().with_writer(std::io::stderr))
+        tracing_subscriber::registry()
+            .with(
+                fmt::layer()
+                    .with_ansi(false)
+                    .with_writer(non_blocking)
+                    .with_filter(file_filter),
+            )
+            .with(
+                fmt::layer()
+                    .with_writer(std::io::stderr)
+                    .with_filter(console_filter),
+            )
             .init();
     }
 
