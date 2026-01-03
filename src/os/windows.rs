@@ -2,12 +2,12 @@
 
 use std::io;
 use std::os::windows::ffi::OsStrExt;
-use winapi::um::shellapi::ShellExecuteW;
-use winapi::um::winuser::SW_SHOW;
-use winapi::um::processthreadsapi::{GetCurrentProcess, OpenProcessToken};
-use winapi::um::handleapi::CloseHandle;
-use winapi::um::winnt::{HANDLE, TOKEN_ELEVATION, TokenElevation, TOKEN_QUERY};
 use winapi::ctypes::c_void;
+use winapi::um::handleapi::CloseHandle;
+use winapi::um::processthreadsapi::{GetCurrentProcess, OpenProcessToken};
+use winapi::um::shellapi::ShellExecuteW;
+use winapi::um::winnt::{HANDLE, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
+use winapi::um::winuser::SW_SHOW;
 
 /// Check if the current process is running with administrator privileges.
 pub fn is_running_as_admin() -> bool {
@@ -15,13 +15,7 @@ pub fn is_running_as_admin() -> bool {
     let mut is_admin = false;
 
     // Try to open the process token
-    let success = unsafe {
-        OpenProcessToken(
-            GetCurrentProcess(),
-            TOKEN_QUERY,
-            &mut token_handle,
-        )
-    };
+    let success = unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token_handle) };
 
     if success != 0 && !token_handle.is_null() {
         let mut token_info: TOKEN_ELEVATION = unsafe { std::mem::zeroed() };
@@ -75,7 +69,11 @@ pub fn run_as_admin(args: &[String]) -> io::Result<()> {
     }
 
     let operation: Vec<u16> = "runas".encode_utf16().chain(std::iter::once(0)).collect();
-    let exe_path_utf16: Vec<u16> = exe_path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let exe_path_utf16: Vec<u16> = exe_path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
     let params_utf16: Vec<u16> = cmdline.encode_utf16().chain(std::iter::once(0)).collect();
 
     let result = unsafe {
@@ -83,7 +81,11 @@ pub fn run_as_admin(args: &[String]) -> io::Result<()> {
             std::ptr::null_mut(),
             operation.as_ptr(),
             exe_path_utf16.as_ptr(),
-            if cmdline.is_empty() { std::ptr::null() } else { params_utf16.as_ptr() },
+            if cmdline.is_empty() {
+                std::ptr::null()
+            } else {
+                params_utf16.as_ptr()
+            },
             std::ptr::null(),
             SW_SHOW,
         )
@@ -93,7 +95,10 @@ pub fn run_as_admin(args: &[String]) -> io::Result<()> {
     if result as i32 > 32 {
         Ok(())
     } else {
-        Err(io::Error::new(io::ErrorKind::Other, "Failed to request elevation"))
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            "Failed to request elevation",
+        ))
     }
 }
 

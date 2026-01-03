@@ -25,7 +25,9 @@ pub mod time;
 pub mod tui;
 
 pub use cli::Cli;
-pub use config::{ClassificationRule, Config, ConfigError, FileOperation, FileType, MonthFormat, ProcessingMode};
+pub use config::{
+    ClassificationRule, Config, ConfigError, FileOperation, FileType, MonthFormat, ProcessingMode,
+};
 pub use error::{Error, Result};
 pub use i18n::init_locale;
 pub use process::Processor;
