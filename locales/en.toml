@@ -1,42 +1,25 @@
 # Gallery Sorter - English Translations
 
-# Welcome and Menu
-welcome_message = "Welcome to Gallery Sorter Interactive Mode!"
-select_option_prompt = "Please select an option to continue."
+# Menu
 menu_option_run_direct = "[1] Run with directly input parameters"
 menu_option_run_config = "[2] Run with selected configuration"
 menu_option_create_config = "[3] Create configuration"
 menu_option_exit = "[4] Exit program"
 select_option = "Select an option"
-goodbye = "Goodbye!"
 
 # Configuration Selection
 no_configs_found = "No configuration files found in Config directory."
-use_option_3_hint = "Use option 3 to create a configuration first."
-available_configurations = "Available Configurations:"
-confirm_modify_config = "Do you need to temporarily modify config values?"
-select_configuration = "Select a configuration"
-back_to_main_menu = "← Back to main menu"
-loading_configuration = "Loading configuration:"
-proceed_with_config = "Proceed with this configuration?"
+available_configurations = "Available Configurations"
 
 # Configuration Creation
-create_new_configuration = "Create New Configuration"
 enter_config_name = "Enter configuration name (without .toml extension)"
 config_name_empty_error = "Configuration name cannot be empty"
 config_name_invalid_chars_error = "Configuration name cannot contain /, \\, or ."
-config_exists_overwrite = "already exists. Overwrite?"
-configuration_cancelled = "Configuration creation cancelled."
-save_configuration = "Save this configuration?"
-config_not_saved = "Configuration not saved."
-config_saved_to = "Configuration saved to:"
 use_option_2_hint = "You can now use option 2 to run with this configuration."
 
 # Configuration Parameters
-configuration_parameters = "Configuration Parameters"
 enter_input_directory = "Enter input directory (or multiple separated by ;)"
 no_input_dirs_specified = "No input directories specified."
-directory_not_exist = "Directory does not exist:"
 enter_output_directory = "Enter output directory"
 enter_exclude_directories = "Enter directories to exclude (folder names or paths, separated by ;, leave empty to skip)"
 
@@ -69,15 +52,13 @@ enable_deduplication = "Enable file deduplication?"
 dry_run_mode = "Dry run mode (preview without making changes)?"
 classify_by_file_type = "Classify by file type (Photos/Videos/Raw)?"
 proceed_instent = "Proceed Instently with Config?"
-operation_cancelled = "Operation cancelled."
 option_no = "No"
 option_yes = "Yes"
 
 # Configuration Summary
-configuration_summary = "Configuration Summary:"
+configuration_summary = "Configuration Summary"
 summary_input = "Input:"
 summary_output = "Output:"
-summary_exclude_dirs = "Exclude:"
 summary_mode = "Mode:"
 summary_classify = "Classify:"
 summary_month_format = "Month Format:"
@@ -87,20 +68,17 @@ summary_dry_run = "Dry Run:"
 summary_classify_by_type = "File Type:"
 
 # Processing
-starting_processing = "Starting processing..."
-scanning_directories = "Scanning input directories..."
-log_saved_to = "Log saved to:"
 processing_complete = "PROCESSING COMPLETE"
 
 # Statistics
-statistics = "Statistics:"
-stat_total_files = "Total files:"
-stat_processed = "Processed:"
-stat_skipped = "Skipped:"
-stat_duplicates = "Duplicates:"
-stat_failed = "Failed:"
-failed_files = "Failed Files:"
-and_n_more = "... and %{n} more..."
+statistics = "Statistics"
+stat_total = "Total"
+stat_processed = "Processed"
+stat_skipped = "Skipped"
+stat_duplicates = "Duplicates"
+stat_failed = "Failed"
+failed_files = "Failed Files"
+failed_files_more = "and %{count} more files"
 
 # Dry Run
 dry_run_notice = "DRY RUN - No files were actually modified"
@@ -124,15 +102,49 @@ status_dry = "[DRY]"
 
 # Other
 already_processed = "(already processed)"
-duplicate_of = "(duplicate of"
+duplicate_of = "duplicate of"
 unknown_error = "Unknown error"
+log_saved_to = "Log saved to:"
 
 # TUI Hints and Prompts
 menu_hint = "↑/↓ Select | Enter Confirm | Esc Back/Exit"
-input_hint = "Press Enter to confirm | Esc Back"
-nav_hint = "↑/↓ or Tab to switch | Enter Confirm | Esc Back"
 processing_progress = "Processing Progress"
 current_file = "Current file:"
 processing_hint = "Press Ctrl+C to force stop"
 summary_hint = "Press Enter to return to main menu"
+config_summary_hint = "Press Enter to start | Esc Back"
+config_summary_save_hint = "Press Enter to save | Esc Back"
+config_summary_modify_hint = "Press Enter to continue | Esc Back"
+nav_hint = "↑/↓ Select | Enter Confirm | Esc Back"
 exit_confirm = "Are you sure you want to exit? (y/n)"
+
+# Unified Form UI
+configuration_form = "Configuration Form"
+form_fields = "Configuration Fields"
+form_fields_title = "Fields (↑/↓ Select | ←/→ Toggle | Enter Edit)"
+form_string_hint = "↑/↓ Select field | Enter Edit string value | Esc Back"
+form_option_hint = "↑/↓ Select field | ←/→ Toggle option value | Esc Back"
+form_next_step_hint = "↑/↓ Select field | Enter Go to next step | Esc Back"
+input_mode_hint = "Input mode: type content | Enter Save | Esc Cancel"
+select_config_hint = "Select config file | Enter Confirm | Esc Back"
+confirm_run_title = "Confirm Execution"
+confirm_modify_title = "Modify configuration?"
+confirm_run_hint = "↑/↓ Select | Enter Confirm | Esc Back"
+confirm_modify_hint = "↑/↓ Select | Enter Confirm | Esc Back"
+output_dir_empty_error = "Output directory cannot be empty"
+
+# Form Field Labels
+field_config_name = "Config Name"
+field_input_dirs = "Input Directories"
+field_output_dir = "Output Directory"
+field_exclude_dirs = "Exclude Directories"
+field_processing_mode = "Processing Mode"
+field_classification = "Classification"
+field_month_format = "Month Format"
+field_classify_by_type = "Classify by Type"
+field_file_operation = "File Operation"
+field_deduplication = "Deduplication"
+field_dry_run = "Dry Run"
+
+# Navigation
+go_to_summary = "Next: View Configuration Summary"

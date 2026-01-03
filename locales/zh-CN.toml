@@ -1,42 +1,25 @@
 # Gallery Sorter - 简体中文翻译
 
-# Welcome and Menu
-welcome_message = "欢迎使用 Gallery Sorter 交互模式！"
-select_option_prompt = "请选择一个选项以继续。"
+# Menu
 menu_option_run_direct = "[1] 直接输入参数运行"
 menu_option_run_config = "[2] 使用已有配置运行"
 menu_option_create_config = "[3] 创建配置文件"
 menu_option_exit = "[4] 退出程序"
 select_option = "选择选项"
-goodbye = "再见！"
 
 # Configuration Selection
 no_configs_found = "Config 目录中未找到配置文件。"
-use_option_3_hint = "请先使用选项 3 创建配置文件。"
-available_configurations = "可用配置："
-confirm_modify_config = "是否需要临时修改配置值？"
-select_configuration = "选择配置"
-back_to_main_menu = "← 返回主菜单"
-loading_configuration = "正在加载配置："
-proceed_with_config = "使用此配置继续？"
+available_configurations = "可用配置"
 
 # Configuration Creation
-create_new_configuration = "创建新配置"
 enter_config_name = "输入配置名称（不含 .toml 扩展名）"
 config_name_empty_error = "配置名称不能为空"
 config_name_invalid_chars_error = "配置名称不能包含 /、\\ 或 ."
-config_exists_overwrite = "已存在。是否覆盖？"
-configuration_cancelled = "已取消创建配置。"
-save_configuration = "保存此配置？"
-config_not_saved = "配置未保存。"
-config_saved_to = "配置已保存至："
 use_option_2_hint = "您现在可以使用选项 2 来运行此配置。"
 
 # Configuration Parameters
-configuration_parameters = "配置参数"
 enter_input_directory = "输入源目录（多个目录用 ; 分隔）"
 no_input_dirs_specified = "未指定输入目录。"
-directory_not_exist = "目录不存在："
 enter_output_directory = "输入目标目录"
 enter_exclude_directories = "输入要排除的目录（文件夹名或路径，用 ; 分隔，留空跳过）"
 
@@ -69,15 +52,13 @@ enable_deduplication = "启用文件去重？"
 dry_run_mode = "试运行模式（预览而不实际修改）？"
 classify_by_file_type = "按文件类型分类（Photos/Videos/Raw）？"
 proceed_instent = "立刻执行配置？"
-operation_cancelled = "操作已取消。"
 option_no = "否"
 option_yes = "是"
 
 # Configuration Summary
-configuration_summary = "配置摘要："
+configuration_summary = "配置摘要"
 summary_input = "输入："
 summary_output = "输出："
-summary_exclude_dirs = "排除："
 summary_mode = "模式："
 summary_classify = "分类："
 summary_month_format = "月份格式："
@@ -87,20 +68,17 @@ summary_dry_run = "试运行："
 summary_classify_by_type = "类型分类："
 
 # Processing
-starting_processing = "开始处理..."
-scanning_directories = "正在扫描输入目录..."
-log_saved_to = "日志已保存至："
 processing_complete = "处理完成"
 
 # Statistics
-statistics = "统计："
-stat_total_files = "文件总数："
-stat_processed = "已处理："
-stat_skipped = "已跳过："
-stat_duplicates = "重复文件："
-stat_failed = "失败："
-failed_files = "失败文件："
-and_n_more = "... 还有 %{n} 个..."
+statistics = "统计"
+stat_total = "总数"
+stat_processed = "已处理"
+stat_skipped = "已跳过"
+stat_duplicates = "重复文件"
+stat_failed = "失败"
+failed_files = "失败文件"
+failed_files_more = "还有 %{count} 个文件"
 
 # Dry Run
 dry_run_notice = "试运行 - 没有实际修改任何文件"
@@ -124,15 +102,49 @@ status_dry = "[试运行]"
 
 # Other
 already_processed = "（已处理）"
-duplicate_of = "（与此重复："
+duplicate_of = "重复于"
 unknown_error = "未知错误"
+log_saved_to = "日志保存至："
 
 # TUI Hints and Prompts
 menu_hint = "↑/↓ 选择 | Enter 确认 | Esc 返回/退出"
-input_hint = "输入完成后按 Enter 确认 | Esc 返回"
-nav_hint = "↑/↓ 或 Tab 切换选项 | Enter 确认 | Esc 返回"
 processing_progress = "处理进度"
 current_file = "当前文件："
 processing_hint = "按 Ctrl+C 强制停止"
 summary_hint = "按 Enter 返回主菜单"
+config_summary_hint = "按 Enter 开始执行 | 按 Esc 返回上一层"
+config_summary_save_hint = "按 Enter 保存 | 按 Esc 返回上一层"
+config_summary_modify_hint = "按 Enter 继续 | 按 Esc 返回上一层"
+nav_hint = "↑/↓ 选择 | Enter 确认 | Esc 返回"
 exit_confirm = "确定要退出吗？(y/n)"
+
+# Unified Form UI
+configuration_form = "配置表单"
+form_fields = "配置项"
+form_fields_title = "配置项（上下键选择，左右键切换值，Enter 编辑输入项）"
+form_string_hint = "↑/↓ 选择配置项 | Enter 编辑文本 | Esc 返回"
+form_option_hint = "↑/↓ 选择配置项 | ←/→ 切换选项值 | Esc 返回"
+form_next_step_hint = "↑/↓ 选择配置项 | Enter 进入下一步 | Esc 返回"
+input_mode_hint = "输入模式：输入内容 | Enter 保存 | Esc 取消"
+select_config_hint = "选择配置文件 | Enter 确认 | Esc 返回"
+confirm_run_title = "确认执行"
+confirm_modify_title = "是否需要修改配置？"
+confirm_run_hint = "↑/↓ 选择 | Enter 确认 | Esc 返回上一层"
+confirm_modify_hint = "↑/↓ 选择 | Enter 确认 | Esc 返回上一层"
+output_dir_empty_error = "输出目录不能为空"
+
+# Form Field Labels
+field_config_name = "配置名称"
+field_input_dirs = "输入目录"
+field_output_dir = "输出目录"
+field_exclude_dirs = "排除目录"
+field_processing_mode = "处理模式"
+field_classification = "分类规则"
+field_month_format = "月份格式"
+field_classify_by_type = "按类型分类"
+field_file_operation = "文件操作"
+field_deduplication = "文件去重"
+field_dry_run = "试运行"
+
+# Navigation
+go_to_summary = "下一步：查看配置摘要"
