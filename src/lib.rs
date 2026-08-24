@@ -34,5 +34,5 @@ pub use error::{Error, Result};
 pub use i18n::init_locale;
 pub use process::Processor;
 pub use rename::{RenameResult, RenameStats, RenameStatus, Renamer};
-pub use state::{IncrementalWatermark, ProcessingState};
+pub use state::{IncrementalWaterLevel, ProcessingState};
 pub use tui::{TuiApp, TuiResult};

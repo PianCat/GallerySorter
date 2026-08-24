@@ -10,7 +10,7 @@ use crate::config::{Config, FileOperation, ProcessingMode};
 use crate::error::{Error, Result};
 use crate::hash::{compute_file_hash, compute_metadata_hash};
 use crate::rename::write_unmodified_paths;
-use crate::state::{IncrementalWatermark, ProcessingState};
+use crate::state::{IncrementalWaterLevel, ProcessingState};
 use crate::time::{ExtractedTime, extract_time};
 use chrono::NaiveDateTime;
 
@@ -144,7 +144,7 @@ impl ProcessingStats {
 pub struct Processor {
     config: Config,
     state: ProcessingState,
-    watermark: Option<IncrementalWatermark>,
+    water_level: Option<IncrementalWaterLevel>,
     stats: Arc<ProcessingStats>,
     cancel: Arc<AtomicBool>,
 }
@@ -189,72 +189,69 @@ impl Processor {
             ProcessingState::new()
         };
 
-        // Helper to collect all supported extensions
-        let get_extensions = || -> Vec<String> {
-            config
-                .image_extensions
-                .iter()
-                .chain(config.video_extensions.iter())
-                .chain(config.raw_extensions.iter())
-                .cloned()
-                .collect()
-        };
-
-        // Load or create watermark for incremental mode
-        let watermark = if config.processing_mode == ProcessingMode::Incremental {
-            // Try to load existing watermark
-            match IncrementalWatermark::load(&config.output_dir)? {
-                Some(wm) => {
+        // Load or create water level for incremental mode
+        let mut rebuilt_water_level = false;
+        let water_level = if config.processing_mode == ProcessingMode::Incremental {
+            // Try to load existing water level
+            match IncrementalWaterLevel::load(&config.output_dir)? {
+                Some(wl) => {
                     // Check if classification settings match
-                    if wm.classification != config.classification
-                        || wm.month_format != config.month_format
+                    if wl.classification != config.classification
+                        || wl.month_format != config.month_format
                     {
                         warn!(
-                            "Watermark classification settings don't match current config, rescanning"
+                            "Water level classification settings don't match current config, rescanning"
                         );
-                        IncrementalWatermark::scan_output_directory(
+                        let scanned = IncrementalWaterLevel::scan_output_directory(
                             &config.output_dir,
-                            config.classification,
-                            config.month_format,
-                            &get_extensions(),
-                        )?
+                            &config,
+                        )?;
+                        rebuilt_water_level = scanned.is_some();
+                        scanned
                     } else {
                         // Verify the newest file still exists
-                        let newest_file_path = config.output_dir.join(&wm.newest_file_path);
+                        let newest_file_path = config.output_dir.join(&wl.newest_file_path);
                         if !newest_file_path.exists() {
                             warn!(
-                                newest_file = %wm.newest_file_path.display(),
-                                "Watermark references non-existent file, rescanning output directory"
+                                newest_file = %wl.newest_file_path.display(),
+                                "Water level references non-existent file, rescanning output directory"
                             );
-                            IncrementalWatermark::scan_output_directory(
+                            let scanned = IncrementalWaterLevel::scan_output_directory(
                                 &config.output_dir,
-                                config.classification,
-                                config.month_format,
-                                &get_extensions(),
-                            )?
+                                &config,
+                            )?;
+                            rebuilt_water_level = scanned.is_some();
+                            scanned
                         } else {
-                            Some(wm)
+                            Some(wl)
                         }
                     }
                 }
                 None => {
-                    // No watermark file, scan directory to find newest file
-                    IncrementalWatermark::scan_output_directory(
-                        &config.output_dir,
-                        config.classification,
-                        config.month_format,
-                        &get_extensions(),
-                    )?
+                    // No water level file, scan directory to find newest file
+                    let scanned =
+                        IncrementalWaterLevel::scan_output_directory(&config.output_dir, &config)?;
+                    rebuilt_water_level = scanned.is_some();
+                    scanned
                 }
             }
         } else {
             None
         };
 
+        // 水位线缺失/损坏或原文件不存在时，先持久化重建后的水位线，
+        // 避免“本次没有新文件”时每次运行都重新扫描。
+        if !config.dry_run
+            && rebuilt_water_level
+            && let Some(ref water_level) = water_level
+        {
+            water_level.save(&config.output_dir)?;
+        }
+
         Ok(Self {
             config,
             state,
-            watermark,
+            water_level,
             stats: Arc::new(ProcessingStats::new()),
             cancel,
         })
@@ -300,61 +297,61 @@ impl Processor {
 
         let config = Arc::new(self.config.clone());
 
-        // Incremental mode: Filter files by timestamp using watermark
+        // Incremental mode: Filter files by timestamp using water level
         // This is done BEFORE computing hashes to minimize disk I/O
-        let (files, skipped_by_watermark) = if config.processing_mode == ProcessingMode::Incremental
-        {
-            if let Some(ref watermark) = self.watermark {
-                info!(
-                    watermark_timestamp = %watermark.newest_timestamp,
-                    "Filtering files by watermark timestamp (only processing newer files)"
-                );
+        let (files, skipped_by_water_level) =
+            if config.processing_mode == ProcessingMode::Incremental {
+                if let Some(ref water_level) = self.water_level {
+                    info!(
+                        water_level_timestamp = %water_level.newest_timestamp,
+                        "Filtering files by water level timestamp (only processing newer files)"
+                    );
 
-                let mut newer_files = Vec::new();
-                let mut skipped_count = 0usize;
+                    let mut newer_files = Vec::new();
+                    let mut skipped_count = 0usize;
 
-                for file_path in files {
-                    // Extract timestamp for comparison
-                    match extract_time(&file_path, &config) {
-                        Ok(time_info) => {
-                            if watermark.is_newer(&time_info.timestamp) {
+                    for file_path in files {
+                        // Extract timestamp for comparison
+                        match extract_time(&file_path, &config) {
+                            Ok(time_info) => {
+                                if water_level.is_newer(&time_info.timestamp) {
+                                    newer_files.push(file_path);
+                                } else {
+                                    debug!(?file_path, "Skipping file older than water level");
+                                    skipped_count += 1;
+                                }
+                            }
+                            Err(_) => {
+                                // Can't determine timestamp, include for processing
                                 newer_files.push(file_path);
-                            } else {
-                                debug!(?file_path, "Skipping file older than watermark");
-                                skipped_count += 1;
                             }
                         }
-                        Err(_) => {
-                            // Can't determine timestamp, include for processing
-                            newer_files.push(file_path);
-                        }
                     }
+
+                    info!(
+                        total = newer_files.len() + skipped_count,
+                        newer = newer_files.len(),
+                        skipped = skipped_count,
+                        "Filtered files by water level timestamp"
+                    );
+
+                    (newer_files, skipped_count)
+                } else {
+                    // No water level (first run or empty output), process all files
+                    info!("No water level found - processing all files (first run behavior)");
+                    (files, 0)
                 }
-
-                info!(
-                    total = newer_files.len() + skipped_count,
-                    newer = newer_files.len(),
-                    skipped = skipped_count,
-                    "Filtered files by watermark timestamp"
-                );
-
-                (newer_files, skipped_count)
             } else {
-                // No watermark (first run or empty output), process all files
-                info!("No watermark found - processing all files (first run behavior)");
                 (files, 0)
-            }
-        } else {
-            (files, 0)
-        };
+            };
 
         // Update skipped count
         self.stats
             .skipped
-            .fetch_add(skipped_by_watermark, Ordering::Relaxed);
+            .fetch_add(skipped_by_water_level, Ordering::Relaxed);
 
         if files.is_empty() {
-            info!("No new files to process (all files are older than watermark)");
+            info!("No new files to process (all files are older than water level)");
             return Ok(Vec::new());
         }
 
@@ -550,8 +547,8 @@ impl Processor {
         if self.config.processing_mode == ProcessingMode::Incremental && !self.config.dry_run {
             self.state.save(&self.config.get_state_file())?;
 
-            // Update watermark with newest processed file
-            self.update_watermark(&results)?;
+            // Update water level with newest processed file
+            self.update_water_level(&results)?;
         }
 
         // 统一文件名模式：把“无元数据未改名 / 处理失败”的源文件写入未修改列表
@@ -631,8 +628,8 @@ impl Processor {
         Ok(hashes)
     }
 
-    /// Update watermark with the newest successfully processed file
-    fn update_watermark(&mut self, results: &[FileResult]) -> Result<()> {
+    /// Update water level with the newest successfully processed file
+    fn update_water_level(&mut self, results: &[FileResult]) -> Result<()> {
         // Find the newest successfully processed file
         let mut newest: Option<(PathBuf, NaiveDateTime, u64)> = None;
 
@@ -667,28 +664,28 @@ impl Processor {
         }
 
         if let Some((path, timestamp, hash)) = newest {
-            // Update or create watermark
-            match &mut self.watermark {
-                Some(wm) => {
-                    wm.update_if_newer(path, timestamp, hash);
-                    wm.set_files_processed(self.stats.processed.load(Ordering::Relaxed));
+            // Update or create water level
+            match &mut self.water_level {
+                Some(wl) => {
+                    wl.update_if_newer(path, timestamp, hash);
+                    wl.set_files_processed(self.stats.processed.load(Ordering::Relaxed));
                 }
                 None => {
-                    let mut wm = IncrementalWatermark::new(
+                    let mut wl = IncrementalWaterLevel::new(
                         path,
                         timestamp,
                         hash,
                         self.config.classification,
                         self.config.month_format,
                     );
-                    wm.set_files_processed(self.stats.processed.load(Ordering::Relaxed));
-                    self.watermark = Some(wm);
+                    wl.set_files_processed(self.stats.processed.load(Ordering::Relaxed));
+                    self.water_level = Some(wl);
                 }
             }
 
-            // Save watermark to disk
-            if let Some(ref wm) = self.watermark {
-                wm.save(&self.config.output_dir)?;
+            // Save water level to disk
+            if let Some(ref wl) = self.water_level {
+                wl.save(&self.config.output_dir)?;
             }
         }
 
@@ -1732,6 +1729,190 @@ mod tests {
     }
 
     #[test]
+    fn test_incremental_rebuilds_water_level_from_invalid_file() {
+        let dir = tempdir().unwrap();
+        let input = dir.path().join("input");
+        let output = dir.path().join("output");
+        let output_photos = output.join("2025/02/Photos");
+        fs::create_dir_all(&input).unwrap();
+        fs::create_dir_all(&output_photos).unwrap();
+
+        fs::write(output_photos.join("IMG_20250201_000001.jpg"), "existing-1").unwrap();
+        fs::write(output_photos.join("IMG_20250201_000002.jpg"), "existing-2").unwrap();
+        fs::write(IncrementalWaterLevel::get_path(&output), "version = 1\n").unwrap();
+        write_media_file(&input, "IMG_20250201_000003.jpg");
+
+        let config = Config {
+            classification: crate::config::ClassificationRule::YearMonth,
+            month_format: crate::config::MonthFormat::Nested,
+            classify_by_type: true,
+            ..incremental_config(&input, &output)
+        };
+        let mut processor = Processor::new(config.clone()).unwrap();
+        let results = processor.run().unwrap();
+        assert_eq!(results.len(), 1);
+        assert!(output_photos.join("IMG_20250201_000003.jpg").exists());
+
+        let water_level = IncrementalWaterLevel::load(&output)
+            .unwrap()
+            .expect("water level should be rebuilt");
+        assert_eq!(
+            water_level.newest_file_path,
+            PathBuf::from("2025")
+                .join("02")
+                .join("Photos")
+                .join("IMG_20250201_000003.jpg")
+        );
+        assert_eq!(
+            water_level.newest_timestamp,
+            NaiveDateTime::parse_from_str("2025-02-01 00:00:03", "%Y-%m-%d %H:%M:%S").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_incremental_persists_rebuilt_water_level_when_no_new_file() {
+        let dir = tempdir().unwrap();
+        let input = dir.path().join("input");
+        let output = dir.path().join("output");
+        let output_photos = output.join("2025/02/Photos");
+        fs::create_dir_all(&input).unwrap();
+        fs::create_dir_all(&output_photos).unwrap();
+
+        fs::write(output_photos.join("IMG_20250201_000001.jpg"), "existing").unwrap();
+        fs::write(IncrementalWaterLevel::get_path(&output), "version = 1\n").unwrap();
+
+        let config = Config {
+            classification: crate::config::ClassificationRule::YearMonth,
+            month_format: crate::config::MonthFormat::Nested,
+            classify_by_type: true,
+            ..incremental_config(&input, &output)
+        };
+        let mut processor = Processor::new(config.clone()).unwrap();
+        let results = processor.run().unwrap();
+        assert!(results.is_empty());
+
+        let water_level = IncrementalWaterLevel::load(&output)
+            .unwrap()
+            .expect("rebuilt water level should be persisted");
+        assert_eq!(
+            water_level.newest_file_path,
+            PathBuf::from("2025")
+                .join("02")
+                .join("Photos")
+                .join("IMG_20250201_000001.jpg")
+        );
+        assert_eq!(
+            water_level.newest_timestamp,
+            NaiveDateTime::parse_from_str("2025-02-01 00:00:01", "%Y-%m-%d %H:%M:%S").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_incremental_dry_run_does_not_persist_rebuilt_water_level() {
+        let dir = tempdir().unwrap();
+        let input = dir.path().join("input");
+        let output = dir.path().join("output");
+        let output_photos = output.join("2025/02/Photos");
+        fs::create_dir_all(&input).unwrap();
+        fs::create_dir_all(&output_photos).unwrap();
+
+        fs::write(output_photos.join("IMG_20250201_000001.jpg"), "existing").unwrap();
+        fs::write(IncrementalWaterLevel::get_path(&output), "version = 1\n").unwrap();
+
+        let config = Config {
+            dry_run: true,
+            classification: crate::config::ClassificationRule::YearMonth,
+            month_format: crate::config::MonthFormat::Nested,
+            classify_by_type: true,
+            ..incremental_config(&input, &output)
+        };
+        let mut processor = Processor::new(config).unwrap();
+        processor.run().unwrap();
+
+        assert!(IncrementalWaterLevel::load(&output).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_incremental_rebuild_prefers_metadata_timestamp() {
+        let dir = tempdir().unwrap();
+        let input = dir.path().join("input");
+        let output = dir.path().join("output");
+        let output_photos = output.join("2025/02/Photos");
+        fs::create_dir_all(&input).unwrap();
+        fs::create_dir_all(&output_photos).unwrap();
+
+        fs::write(
+            output_photos.join("IMG_20250201_000001.jpg"),
+            exif_jpeg("2025:02:01 00:00:01"),
+        )
+        .unwrap();
+        fs::write(output_photos.join("IMG_20250201_000003.jpg"), "no-exif").unwrap();
+        fs::write(IncrementalWaterLevel::get_path(&output), "version = 1\n").unwrap();
+
+        let config = Config {
+            classification: crate::config::ClassificationRule::YearMonth,
+            month_format: crate::config::MonthFormat::Nested,
+            classify_by_type: true,
+            ..incremental_config(&input, &output)
+        };
+        let mut processor = Processor::new(config).unwrap();
+        processor.run().unwrap();
+
+        let water_level = IncrementalWaterLevel::load(&output)
+            .unwrap()
+            .expect("water level should be rebuilt");
+        assert_eq!(
+            water_level.newest_file_path,
+            PathBuf::from("2025")
+                .join("02")
+                .join("Photos")
+                .join("IMG_20250201_000001.jpg")
+        );
+        assert_eq!(
+            water_level.newest_timestamp,
+            NaiveDateTime::parse_from_str("2025-02-01 00:00:01", "%Y-%m-%d %H:%M:%S").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_incremental_rebuild_ignores_future_filename_timestamp() {
+        let dir = tempdir().unwrap();
+        let input = dir.path().join("input");
+        let output = dir.path().join("output");
+        let output_photos = output.join("2025/02/Photos");
+        fs::create_dir_all(&input).unwrap();
+        fs::create_dir_all(&output_photos).unwrap();
+
+        fs::write(output_photos.join("IMG_20250201_000001.jpg"), "normal").unwrap();
+        fs::write(output_photos.join("IMG_20270201_000001.jpg"), "future-name").unwrap();
+        fs::write(IncrementalWaterLevel::get_path(&output), "version = 1\n").unwrap();
+
+        let config = Config {
+            classification: crate::config::ClassificationRule::YearMonth,
+            month_format: crate::config::MonthFormat::Nested,
+            classify_by_type: true,
+            ..incremental_config(&input, &output)
+        };
+        let mut processor = Processor::new(config).unwrap();
+        processor.run().unwrap();
+
+        let water_level = IncrementalWaterLevel::load(&output)
+            .unwrap()
+            .expect("water level should be rebuilt");
+        assert_eq!(
+            water_level.newest_file_path,
+            PathBuf::from("2025")
+                .join("02")
+                .join("Photos")
+                .join("IMG_20250201_000001.jpg")
+        );
+        assert_eq!(
+            water_level.newest_timestamp,
+            NaiveDateTime::parse_from_str("2025-02-01 00:00:01", "%Y-%m-%d %H:%M:%S").unwrap()
+        );
+    }
+
+    #[test]
     fn test_cancel_during_run_saves_state_to_interruption_point() {
         let dir = tempdir().unwrap();
         let input = dir.path().join("input");
@@ -1780,10 +1961,10 @@ mod tests {
         assert_eq!(state.file_count(), processed);
 
         // 水位线更新到已处理的最新文件
-        let watermark = IncrementalWatermark::load(&config.output_dir).unwrap();
+        let water_level = IncrementalWaterLevel::load(&config.output_dir).unwrap();
         assert!(
-            watermark.is_some(),
-            "watermark should be saved after processing"
+            water_level.is_some(),
+            "water level should be saved after processing"
         );
     }
 
@@ -1854,15 +2035,15 @@ mod tests {
         assert_eq!(resume_state.file_count(), 12);
 
         // 水位线（过滤语义相关字段）一致
-        let resume_wm = IncrementalWatermark::load(&output_resume)
+        let resume_wl = IncrementalWaterLevel::load(&output_resume)
             .unwrap()
-            .expect("resume watermark should exist");
-        let full_wm = IncrementalWatermark::load(&output_full)
+            .expect("resume water level should exist");
+        let full_wl = IncrementalWaterLevel::load(&output_full)
             .unwrap()
-            .expect("full watermark should exist");
-        assert_eq!(resume_wm.newest_file_path, full_wm.newest_file_path);
-        assert_eq!(resume_wm.newest_timestamp, full_wm.newest_timestamp);
-        assert_eq!(resume_wm.newest_hash, full_wm.newest_hash);
+            .expect("full water level should exist");
+        assert_eq!(resume_wl.newest_file_path, full_wl.newest_file_path);
+        assert_eq!(resume_wl.newest_timestamp, full_wl.newest_timestamp);
+        assert_eq!(resume_wl.newest_hash, full_wl.newest_hash);
     }
 
     #[test]

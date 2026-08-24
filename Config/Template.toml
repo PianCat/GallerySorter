@@ -37,7 +37,7 @@ output_dir = "D:/Photos/Sorted"
 # "incremental" (recommended for regular use)
 #   - Only processes files newer than the newest file in target
 #   - Most efficient for ongoing photo imports
-#   - Maintains a watermark file to track progress
+#   - Maintains a water level file to track progress
 #
 # "supplement"
 #   - Processes all files but skips existing ones with same content

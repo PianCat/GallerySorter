@@ -1,218 +1,27 @@
-//! Incremental processing state management
+//! Water level (TOML) incremental state
 //!
-//! Provides two mechanisms for incremental processing:
-//! 1. Full state tracking (JSON) - tracks every processed file
-//! 2. Watermark-based (TOML) - tracks only the newest file for fast comparison
-//!
-//! The watermark approach is more efficient for append-only workflows like
-//! photo imports, as it only needs to compare timestamps rather than
-//! computing metadata hashes for all files.
+//! Tracks only the newest processed file, enabling quick filtering of
+//! source files without computing metadata hashes for every file.
 
-use crate::config::{ClassificationRule, MonthFormat};
+use crate::config::{ClassificationRule, Config, MonthFormat};
 use crate::error::{Error, Result};
-use chrono::NaiveDateTime;
+use chrono::{Datelike, NaiveDateTime};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fs::{self, File};
-use std::io::{BufReader, BufWriter};
+use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 use walkdir::WalkDir;
 
-/// Record of a processed file
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProcessedFile {
-    /// Original file path
-    pub source_path: PathBuf,
-
-    /// Destination file path
-    pub dest_path: PathBuf,
-
-    /// File content hash
-    pub content_hash: u64,
-
-    /// Metadata hash (size + mtime) for quick change detection
-    pub metadata_hash: u64,
-
-    /// Timestamp when the file was processed
-    pub processed_at: chrono::DateTime<chrono::Utc>,
-}
-
-/// Processing state for incremental operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProcessingState {
-    /// Version for state file format compatibility
-    version: u32,
-
-    /// Map of source path to processed file record
-    processed_files: HashMap<PathBuf, ProcessedFile>,
-
-    /// Map of content hash to destination path (for deduplication)
-    hash_to_dest: HashMap<u64, PathBuf>,
-
-    /// Last run timestamp
-    last_run: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-impl Default for ProcessingState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ProcessingState {
-    /// Current state file format version
-    const VERSION: u32 = 1;
-
-    /// Create a new empty state
-    pub fn new() -> Self {
-        Self {
-            version: Self::VERSION,
-            processed_files: HashMap::new(),
-            hash_to_dest: HashMap::new(),
-            last_run: None,
-        }
-    }
-
-    /// Load state from file
-    pub fn load(path: &Path) -> Result<Self> {
-        if !path.exists() {
-            debug!(?path, "State file does not exist, creating new state");
-            return Ok(Self::new());
-        }
-
-        let file = File::open(path)
-            .map_err(|e| Error::StateFile(format!("Failed to open state file: {}", e)))?;
-        let reader = BufReader::new(file);
-
-        let state: Self = serde_json::from_reader(reader)
-            .map_err(|e| Error::StateFile(format!("Failed to parse state file: {}", e)))?;
-
-        if state.version != Self::VERSION {
-            warn!(
-                state_version = state.version,
-                current_version = Self::VERSION,
-                "State file version mismatch, starting fresh"
-            );
-            return Ok(Self::new());
-        }
-
-        info!(
-            files_tracked = state.processed_files.len(),
-            "Loaded processing state"
-        );
-
-        Ok(state)
-    }
-
-    /// Save state to file
-    pub fn save(&mut self, path: &Path) -> Result<()> {
-        self.last_run = Some(chrono::Utc::now());
-
-        // Create parent directory if it doesn't exist
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        // Write to a temporary file first, then rename for atomicity
-        let temp_path = path.with_extension("tmp");
-
-        let file = File::create(&temp_path)
-            .map_err(|e| Error::StateFile(format!("Failed to create temp state file: {}", e)))?;
-        let writer = BufWriter::new(file);
-
-        serde_json::to_writer_pretty(writer, self)
-            .map_err(|e| Error::StateFile(format!("Failed to write state file: {}", e)))?;
-
-        // Atomic rename
-        fs::rename(&temp_path, path)
-            .map_err(|e| Error::StateFile(format!("Failed to rename temp state file: {}", e)))?;
-
-        info!(
-            files_tracked = self.processed_files.len(),
-            "Saved processing state"
-        );
-
-        Ok(())
-    }
-
-    /// Check if a file needs processing
-    ///
-    /// Returns true if:
-    /// - File has not been processed before
-    /// - File's metadata hash has changed (modified since last processing)
-    pub fn needs_processing(&self, path: &Path, metadata_hash: u64) -> bool {
-        match self.processed_files.get(path) {
-            Some(record) => record.metadata_hash != metadata_hash,
-            None => true,
-        }
-    }
-
-    /// Check if a content hash already exists (duplicate detection)
-    pub fn has_content_hash(&self, content_hash: u64) -> Option<&PathBuf> {
-        self.hash_to_dest.get(&content_hash)
-    }
-
-    /// Record a processed file
-    pub fn record_processed(
-        &mut self,
-        source_path: PathBuf,
-        dest_path: PathBuf,
-        content_hash: u64,
-        metadata_hash: u64,
-    ) {
-        let record = ProcessedFile {
-            source_path: source_path.clone(),
-            dest_path: dest_path.clone(),
-            content_hash,
-            metadata_hash,
-            processed_at: chrono::Utc::now(),
-        };
-
-        self.processed_files.insert(source_path, record);
-        self.hash_to_dest.insert(content_hash, dest_path);
-    }
-
-    /// Get the number of tracked files
-    pub fn file_count(&self) -> usize {
-        self.processed_files.len()
-    }
-
-    /// Get last run timestamp
-    pub fn last_run(&self) -> Option<chrono::DateTime<chrono::Utc>> {
-        self.last_run
-    }
-
-    /// Clear all state
-    pub fn clear(&mut self) {
-        self.processed_files.clear();
-        self.hash_to_dest.clear();
-        self.last_run = None;
-    }
-
-    /// Remove entries for files that no longer exist at their source paths
-    pub fn cleanup_missing(&mut self) {
-        let missing: Vec<PathBuf> = self
-            .processed_files
-            .keys()
-            .filter(|p| !p.exists())
-            .cloned()
-            .collect();
-
-        for path in &missing {
-            if let Some(record) = self.processed_files.remove(path) {
-                self.hash_to_dest.remove(&record.content_hash);
-            }
-        }
-
-        if !missing.is_empty() {
-            info!(count = missing.len(), "Cleaned up missing file entries");
-        }
-    }
-}
-
 /// Increment Metadata file name
-const WATERMARK_FILENAME: &str = ".gallery_sorter_increment_metadata.toml";
+const WATER_LEVEL_FILENAME: &str = ".gallery_sorter_increment_metadata.toml";
+
+/// 重建水位线时的时间来源优先级：元数据 > 文件名 > 文件系统时间。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum WaterLevelTimePriority {
+    FileSystem,
+    Filename,
+    Metadata,
+}
 
 /// Serde helper for serializing u64 as hex string (TOML doesn't support u64 > i64::MAX)
 mod hex_u64 {
@@ -234,12 +43,12 @@ mod hex_u64 {
     }
 }
 
-/// Incremental watermark for efficient timestamp-based filtering
+/// Incremental water level for efficient timestamp-based filtering
 ///
 /// This tracks only the newest processed file, enabling quick filtering
 /// of source files without computing hashes for every file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IncrementalWatermark {
+pub struct IncrementalWaterLevel {
     /// Version for format compatibility
     version: u32,
 
@@ -259,18 +68,18 @@ pub struct IncrementalWatermark {
     /// Month format (if year-month classification)
     pub month_format: MonthFormat,
 
-    /// When this watermark was last updated
+    /// When this water level was last updated
     pub last_updated: chrono::DateTime<chrono::Utc>,
 
     /// Total files processed in last run
     pub files_processed: usize,
 }
 
-impl IncrementalWatermark {
-    /// Current watermark format version
+impl IncrementalWaterLevel {
+    /// Current water level format version
     const VERSION: u32 = 1;
 
-    /// Create a new watermark
+    /// Create a new water level
     pub fn new(
         newest_file_path: PathBuf,
         newest_timestamp: NaiveDateTime,
@@ -290,45 +99,54 @@ impl IncrementalWatermark {
         }
     }
 
-    /// Get the watermark file path for an output directory
+    /// Get the water level file path for an output directory
     pub fn get_path(output_dir: &Path) -> PathBuf {
-        output_dir.join(WATERMARK_FILENAME)
+        output_dir.join(WATER_LEVEL_FILENAME)
     }
 
-    /// Load watermark from output directory
+    /// Load water level from output directory
     pub fn load(output_dir: &Path) -> Result<Option<Self>> {
         let path = Self::get_path(output_dir);
 
         if !path.exists() {
-            debug!(?path, "Watermark file does not exist");
+            debug!(?path, "Water level file does not exist");
             return Ok(None);
         }
 
         let content = fs::read_to_string(&path)
-            .map_err(|e| Error::StateFile(format!("Failed to read watermark file: {}", e)))?;
+            .map_err(|e| Error::StateFile(format!("Failed to read water level file: {}", e)))?;
 
-        let watermark: Self = toml::from_str(&content)
-            .map_err(|e| Error::StateFile(format!("Failed to parse watermark file: {}", e)))?;
+        let water_level: Self = match toml::from_str(&content) {
+            Ok(water_level) => water_level,
+            Err(e) => {
+                warn!(
+                    path = %path.display(),
+                    error = %e,
+                    "Water level file is invalid, rescanning output directory"
+                );
+                return Ok(None);
+            }
+        };
 
-        if watermark.version != Self::VERSION {
+        if water_level.version != Self::VERSION {
             warn!(
-                watermark_version = watermark.version,
+                water_level_version = water_level.version,
                 current_version = Self::VERSION,
-                "Watermark version mismatch, will rescan"
+                "Water level version mismatch, will rescan"
             );
             return Ok(None);
         }
 
         info!(
-            newest_file = %watermark.newest_file_path.display(),
-            newest_timestamp = %watermark.newest_timestamp,
-            "Loaded incremental watermark"
+            newest_file = %water_level.newest_file_path.display(),
+            newest_timestamp = %water_level.newest_timestamp,
+            "Loaded incremental water level"
         );
 
-        Ok(Some(watermark))
+        Ok(Some(water_level))
     }
 
-    /// Save watermark to output directory
+    /// Save water level to output directory
     pub fn save(&self, output_dir: &Path) -> Result<()> {
         let path = Self::get_path(output_dir);
 
@@ -338,50 +156,72 @@ impl IncrementalWatermark {
         }
 
         let content = toml::to_string_pretty(self)
-            .map_err(|e| Error::StateFile(format!("Failed to serialize watermark: {}", e)))?;
+            .map_err(|e| Error::StateFile(format!("Failed to serialize water level: {}", e)))?;
 
         // Write atomically via temp file
         let temp_path = path.with_extension("tmp");
         fs::write(&temp_path, &content)
-            .map_err(|e| Error::StateFile(format!("Failed to write watermark file: {}", e)))?;
+            .map_err(|e| Error::StateFile(format!("Failed to write water level file: {}", e)))?;
 
         fs::rename(&temp_path, &path)
-            .map_err(|e| Error::StateFile(format!("Failed to rename watermark file: {}", e)))?;
+            .map_err(|e| Error::StateFile(format!("Failed to rename water level file: {}", e)))?;
 
         info!(
             newest_file = %self.newest_file_path.display(),
             newest_timestamp = %self.newest_timestamp,
-            "Saved incremental watermark"
+            "Saved incremental water level"
         );
 
         Ok(())
     }
 
-    /// Check if a source file's timestamp is newer than the watermark
+    /// Check if a source file's timestamp is newer than the water level
     ///
-    /// Returns true if the file should be processed (is newer than watermark)
+    /// Returns true if the file should be processed (is newer than water level)
     pub fn is_newer(&self, timestamp: &NaiveDateTime) -> bool {
         *timestamp > self.newest_timestamp
     }
 
     /// Scan output directory to find the newest file based on directory structure
     ///
-    /// This is used when the watermark file doesn't exist but we need to
+    /// This is used when the water level file doesn't exist but we need to
     /// determine the cutoff timestamp by analyzing existing files.
-    pub fn scan_output_directory(
-        output_dir: &Path,
-        classification: ClassificationRule,
-        month_format: MonthFormat,
-        supported_extensions: &[String],
-    ) -> Result<Option<Self>> {
+    pub fn scan_output_directory(output_dir: &Path, config: &Config) -> Result<Option<Self>> {
         if !output_dir.exists() {
             debug!(?output_dir, "Output directory does not exist");
             return Ok(None);
         }
 
-        info!(?output_dir, "Scanning output directory to find newest file");
+        info!(
+            ?output_dir,
+            "Scanning output directory to find newest folder"
+        );
 
-        let mut newest: Option<(PathBuf, NaiveDateTime)> = None;
+        // 第一遍：锁定最新的分类文件夹。
+        let newest_folder = if config.classification == ClassificationRule::None {
+            (0, 0)
+        } else {
+            let mut newest_folder: Option<(i32, u32)> = None;
+            for entry in WalkDir::new(output_dir)
+                .follow_links(true)
+                .into_iter()
+                .filter_map(|e| e.ok())
+            {
+                let path = entry.path();
+                if !path.is_file() || !Self::is_visible_output_file(path, config) {
+                    continue;
+                }
+                if let Some(folder) = Self::output_folder_key(path, output_dir, config)
+                    && newest_folder.is_none_or(|current| folder > current)
+                {
+                    newest_folder = Some(folder);
+                }
+            }
+            newest_folder.unwrap_or((0, 0))
+        };
+
+        // 第二遍：只扫描最新文件夹，按可信度选择真正最新的文件。
+        let mut newest: Option<(WaterLevelTimePriority, NaiveDateTime, PathBuf)> = None;
 
         for entry in WalkDir::new(output_dir)
             .follow_links(true)
@@ -390,50 +230,42 @@ impl IncrementalWatermark {
         {
             let path = entry.path();
 
-            // Skip non-files
-            if !path.is_file() {
+            if !Self::is_visible_output_file(path, config) {
                 continue;
             }
 
-            // Skip hidden files and the watermark file itself
-            if let Some(name) = path.file_name().and_then(|n| n.to_str())
-                && name.starts_with('.')
-            {
-                continue;
-            }
-
-            // Check if supported extension
-            let ext = path
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(|e| e.to_lowercase());
-
-            if let Some(ext) = ext {
-                if !supported_extensions.iter().any(|e| e == &ext) {
+            if config.classification != ClassificationRule::None {
+                let Some(folder) = Self::output_folder_key(path, output_dir, config) else {
+                    continue;
+                };
+                if folder != newest_folder {
                     continue;
                 }
-            } else {
-                continue;
             }
 
-            // Try to extract timestamp from directory structure
-            if let Some(timestamp) =
-                Self::extract_timestamp_from_path(path, output_dir, classification, month_format)
-            {
-                match &newest {
-                    Some((_, newest_ts)) if timestamp > *newest_ts => {
-                        newest = Some((path.to_path_buf(), timestamp));
+            let Some((priority, timestamp)) = Self::extract_water_level_candidate(path, config)
+            else {
+                continue;
+            };
+            let candidate = (priority, timestamp, path.to_path_buf());
+
+            match &newest {
+                Some((newest_priority, newest_ts, newest_path)) => {
+                    let is_newer = candidate.0 > *newest_priority
+                        || (candidate.0 == *newest_priority && candidate.1 > *newest_ts)
+                        || (candidate.0 == *newest_priority
+                            && candidate.1 == *newest_ts
+                            && candidate.2 > *newest_path);
+                    if is_newer {
+                        newest = Some(candidate);
                     }
-                    None => {
-                        newest = Some((path.to_path_buf(), timestamp));
-                    }
-                    _ => {}
                 }
+                None => newest = Some(candidate),
             }
         }
 
         match newest {
-            Some((path, timestamp)) => {
+            Some((_, timestamp, path)) => {
                 // Compute hash for verification
                 let hash = crate::hash::compute_file_hash(&path, 100 * 1024 * 1024).unwrap_or(0);
 
@@ -449,8 +281,8 @@ impl IncrementalWatermark {
                     relative_path,
                     timestamp,
                     hash,
-                    classification,
-                    month_format,
+                    config.classification,
+                    config.month_format,
                 )))
             }
             None => {
@@ -458,6 +290,91 @@ impl IncrementalWatermark {
                 Ok(None)
             }
         }
+    }
+
+    /// 判断是否为可见且受支持的输出媒体文件。
+    fn is_visible_output_file(path: &Path, config: &Config) -> bool {
+        if !path.is_file() {
+            return false;
+        }
+        if let Some(name) = path.file_name().and_then(|n| n.to_str())
+            && name.starts_with('.')
+        {
+            return false;
+        }
+
+        let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+            return false;
+        };
+        config.is_image(ext) || config.is_video(ext) || config.is_raw(ext)
+    }
+
+    /// 按分类从目录结构取得文件夹优先级标识。
+    fn output_folder_key(path: &Path, output_dir: &Path, config: &Config) -> Option<(i32, u32)> {
+        if config.classification == ClassificationRule::None {
+            return Some((0, 0));
+        }
+
+        let folder_timestamp = Self::extract_timestamp_from_path(
+            path,
+            output_dir,
+            config.classification,
+            config.month_format,
+        )?;
+        Some((folder_timestamp.year(), folder_timestamp.month()))
+    }
+
+    /// 从输出文件提取时间戳：EXIF/FFprobe 元数据 > 文件名 > 本地修改时间。
+    ///
+    /// 明显晚于当前时间（超过 1 天）的异常值会被忽略，避免异常文件把水位线推远。
+    fn extract_water_level_candidate(
+        path: &Path,
+        config: &Config,
+    ) -> Option<(WaterLevelTimePriority, NaiveDateTime)> {
+        let now = chrono::Local::now().naive_local();
+
+        if let Ok(metadata) = crate::time::extract_metadata_time(path, config) {
+            if !Self::is_future_timestamp(metadata.timestamp, now) {
+                return Some((WaterLevelTimePriority::Metadata, metadata.timestamp));
+            }
+            warn!(
+                ?path,
+                timestamp = %metadata.timestamp,
+                "Water level metadata timestamp is in the future, ignoring"
+            );
+        }
+
+        if let Some(filename) = path.file_name().and_then(|name| name.to_str())
+            && let Some(timestamp) = crate::time::filename::parse_filename_time(filename)
+        {
+            if !Self::is_future_timestamp(timestamp, now) {
+                return Some((WaterLevelTimePriority::Filename, timestamp));
+            }
+            warn!(
+                ?path,
+                timestamp = %timestamp,
+                "Water level filename timestamp is in the future, ignoring"
+            );
+        }
+
+        let modified = fs::metadata(path).ok()?.modified().ok()?;
+        let datetime: chrono::DateTime<chrono::Local> = modified.into();
+        let timestamp = datetime.naive_local();
+
+        if Self::is_future_timestamp(timestamp, now) {
+            warn!(
+                ?path,
+                timestamp = %timestamp,
+                "Water level file system timestamp is in the future, ignoring"
+            );
+            return None;
+        }
+
+        Some((WaterLevelTimePriority::FileSystem, timestamp))
+    }
+
+    fn is_future_timestamp(timestamp: NaiveDateTime, now: NaiveDateTime) -> bool {
+        timestamp > now + chrono::Duration::days(1)
     }
 
     /// Extract timestamp from file path based on directory structure
@@ -552,7 +469,7 @@ impl IncrementalWatermark {
         }
     }
 
-    /// Update watermark with a new file if it's newer than the current one
+    /// Update water level with a new file if it's newer than the current one
     pub fn update_if_newer(&mut self, file_path: PathBuf, timestamp: NaiveDateTime, hash: u64) {
         if timestamp > self.newest_timestamp {
             self.newest_file_path = file_path;
@@ -572,57 +489,25 @@ impl IncrementalWatermark {
 mod tests {
     use super::*;
     use chrono::Datelike;
+    use std::time::{Duration, SystemTime};
     use tempfile::tempdir;
 
     #[test]
-    fn test_new_state() {
-        let state = ProcessingState::new();
-        assert_eq!(state.file_count(), 0);
-        assert!(state.last_run().is_none());
-    }
-
-    #[test]
-    fn test_record_and_query() {
-        let mut state = ProcessingState::new();
-
-        let source = PathBuf::from("/source/file.jpg");
-        let dest = PathBuf::from("/dest/2024/01/file.jpg");
-        let content_hash = 12345u64;
-        let metadata_hash = 67890u64;
-
-        assert!(state.needs_processing(&source, metadata_hash));
-        assert!(state.has_content_hash(content_hash).is_none());
-
-        state.record_processed(source.clone(), dest.clone(), content_hash, metadata_hash);
-
-        assert!(!state.needs_processing(&source, metadata_hash));
-        assert!(state.needs_processing(&source, 99999)); // Different metadata hash
-        assert_eq!(state.has_content_hash(content_hash), Some(&dest));
-        assert_eq!(state.file_count(), 1);
-    }
-
-    #[test]
-    fn test_save_and_load() {
+    fn test_water_level_load_returns_none_when_newest_file_missing() {
         let dir = tempdir().unwrap();
-        let state_path = dir.path().join("state.json");
+        let water_level_path = IncrementalWaterLevel::get_path(dir.path());
+        fs::write(&water_level_path, "version = 1\n").unwrap();
 
-        let mut state = ProcessingState::new();
-        let source = PathBuf::from("/source/file.jpg");
-        let dest = PathBuf::from("/dest/2024/01/file.jpg");
-        state.record_processed(source.clone(), dest.clone(), 12345, 67890);
+        let loaded = IncrementalWaterLevel::load(dir.path()).unwrap();
 
-        state.save(&state_path).unwrap();
-
-        let loaded = ProcessingState::load(&state_path).unwrap();
-        assert_eq!(loaded.file_count(), 1);
-        assert!(!loaded.needs_processing(&source, 67890));
+        assert!(loaded.is_none());
     }
 
     #[test]
-    fn test_watermark_new() {
+    fn test_water_level_new() {
         let timestamp =
             NaiveDateTime::parse_from_str("2024-06-15 14:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
-        let wm = IncrementalWatermark::new(
+        let wl = IncrementalWaterLevel::new(
             PathBuf::from("2024/06/photo.jpg"),
             timestamp,
             12345,
@@ -630,16 +515,16 @@ mod tests {
             MonthFormat::Nested,
         );
 
-        assert_eq!(wm.newest_timestamp, timestamp);
-        assert_eq!(wm.newest_hash, 12345);
-        assert_eq!(wm.classification, ClassificationRule::YearMonth);
+        assert_eq!(wl.newest_timestamp, timestamp);
+        assert_eq!(wl.newest_hash, 12345);
+        assert_eq!(wl.classification, ClassificationRule::YearMonth);
     }
 
     #[test]
-    fn test_watermark_is_newer() {
+    fn test_water_level_is_newer() {
         let timestamp =
             NaiveDateTime::parse_from_str("2024-06-15 14:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
-        let wm = IncrementalWatermark::new(
+        let wl = IncrementalWaterLevel::new(
             PathBuf::from("photo.jpg"),
             timestamp,
             12345,
@@ -650,22 +535,22 @@ mod tests {
         // Older timestamp - should not be newer
         let older =
             NaiveDateTime::parse_from_str("2024-05-01 10:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
-        assert!(!wm.is_newer(&older));
+        assert!(!wl.is_newer(&older));
 
         // Same timestamp - should not be newer
-        assert!(!wm.is_newer(&timestamp));
+        assert!(!wl.is_newer(&timestamp));
 
         // Newer timestamp - should be newer
         let newer =
             NaiveDateTime::parse_from_str("2024-07-01 10:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
-        assert!(wm.is_newer(&newer));
+        assert!(wl.is_newer(&newer));
     }
 
     #[test]
-    fn test_watermark_update_if_newer() {
+    fn test_water_level_update_if_newer() {
         let timestamp1 =
             NaiveDateTime::parse_from_str("2024-06-15 14:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
-        let mut wm = IncrementalWatermark::new(
+        let mut wl = IncrementalWaterLevel::new(
             PathBuf::from("2024/06/photo1.jpg"),
             timestamp1,
             12345,
@@ -676,27 +561,27 @@ mod tests {
         // Try to update with older timestamp - should not change
         let older =
             NaiveDateTime::parse_from_str("2024-05-01 10:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
-        wm.update_if_newer(PathBuf::from("2024/05/old.jpg"), older, 99999);
-        assert_eq!(wm.newest_timestamp, timestamp1);
-        assert_eq!(wm.newest_hash, 12345);
+        wl.update_if_newer(PathBuf::from("2024/05/old.jpg"), older, 99999);
+        assert_eq!(wl.newest_timestamp, timestamp1);
+        assert_eq!(wl.newest_hash, 12345);
 
         // Update with newer timestamp - should change
         let newer =
             NaiveDateTime::parse_from_str("2024-07-20 18:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
-        wm.update_if_newer(PathBuf::from("2024/07/new.jpg"), newer, 67890);
-        assert_eq!(wm.newest_timestamp, newer);
-        assert_eq!(wm.newest_hash, 67890);
-        assert_eq!(wm.newest_file_path, PathBuf::from("2024/07/new.jpg"));
+        wl.update_if_newer(PathBuf::from("2024/07/new.jpg"), newer, 67890);
+        assert_eq!(wl.newest_timestamp, newer);
+        assert_eq!(wl.newest_hash, 67890);
+        assert_eq!(wl.newest_file_path, PathBuf::from("2024/07/new.jpg"));
     }
 
     #[test]
-    fn test_watermark_save_and_load() {
+    fn test_water_level_save_and_load() {
         let dir = tempdir().unwrap();
         let output_dir = dir.path();
 
         let timestamp =
             NaiveDateTime::parse_from_str("2024-06-15 14:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
-        let wm = IncrementalWatermark::new(
+        let wl = IncrementalWaterLevel::new(
             PathBuf::from("2024/06/photo.jpg"),
             timestamp,
             12345,
@@ -704,15 +589,15 @@ mod tests {
             MonthFormat::Nested,
         );
 
-        // Save watermark
-        wm.save(output_dir).unwrap();
+        // Save water level
+        wl.save(output_dir).unwrap();
 
         // Check file exists
-        let wm_path = IncrementalWatermark::get_path(output_dir);
-        assert!(wm_path.exists());
+        let wl_path = IncrementalWaterLevel::get_path(output_dir);
+        assert!(wl_path.exists());
 
-        // Load watermark
-        let loaded = IncrementalWatermark::load(output_dir).unwrap();
+        // Load water level
+        let loaded = IncrementalWaterLevel::load(output_dir).unwrap();
         assert!(loaded.is_some());
 
         let loaded = loaded.unwrap();
@@ -723,12 +608,12 @@ mod tests {
     }
 
     #[test]
-    fn test_watermark_extract_timestamp_nested() {
+    fn test_water_level_extract_timestamp_nested() {
         let output_dir = PathBuf::from("/output");
 
         // Test nested format: /output/2024/06/photo.jpg
         let file_path = PathBuf::from("/output/2024/06/photo.jpg");
-        let ts = IncrementalWatermark::extract_timestamp_from_path(
+        let ts = IncrementalWaterLevel::extract_timestamp_from_path(
             &file_path,
             &output_dir,
             ClassificationRule::YearMonth,
@@ -742,12 +627,12 @@ mod tests {
     }
 
     #[test]
-    fn test_watermark_extract_timestamp_combined() {
+    fn test_water_level_extract_timestamp_combined() {
         let output_dir = PathBuf::from("/output");
 
         // Test combined format: /output/2024-06/photo.jpg
         let file_path = PathBuf::from("/output/2024-06/photo.jpg");
-        let ts = IncrementalWatermark::extract_timestamp_from_path(
+        let ts = IncrementalWaterLevel::extract_timestamp_from_path(
             &file_path,
             &output_dir,
             ClassificationRule::YearMonth,
@@ -761,12 +646,89 @@ mod tests {
     }
 
     #[test]
-    fn test_watermark_extract_timestamp_year_only() {
+    fn test_water_level_scan_uses_newest_month_and_newest_file_timestamp() {
+        let dir = tempdir().unwrap();
+        let output_dir = dir.path();
+        let july = output_dir.join("2026/07/Photos");
+        let august = output_dir.join("2026/08/Photos");
+        fs::create_dir_all(&july).unwrap();
+        fs::create_dir_all(&august).unwrap();
+
+        fs::write(july.join("IMG_20260731_235959.jpg"), "older-folder").unwrap();
+        fs::write(august.join("IMG_20260801_000000.jpg"), "newer-folder-start").unwrap();
+        fs::write(august.join("IMG_20260824_120000.jpg"), "newest-file").unwrap();
+
+        let config = Config {
+            classification: ClassificationRule::YearMonth,
+            month_format: MonthFormat::Nested,
+            image_extensions: vec!["jpg".to_string()],
+            ..Default::default()
+        };
+        let water_level = IncrementalWaterLevel::scan_output_directory(output_dir, &config)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            water_level.newest_file_path,
+            PathBuf::from("2026")
+                .join("08")
+                .join("Photos")
+                .join("IMG_20260824_120000.jpg")
+        );
+        assert_eq!(
+            water_level.newest_timestamp,
+            NaiveDateTime::parse_from_str("2026-08-24 12:00:00", "%Y-%m-%d %H:%M:%S").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_water_level_scan_prefers_filename_over_newer_mtime() {
+        let dir = tempdir().unwrap();
+        let output_dir = dir.path();
+        let photos = output_dir.join("2025/02/Photos");
+        fs::create_dir_all(&photos).unwrap();
+
+        let earlier_name = photos.join("IMG_20250201_000001.jpg");
+        let later_name = photos.join("IMG_20250202_000001.jpg");
+        fs::write(&earlier_name, "earlier-filename").unwrap();
+        fs::write(&later_name, "later-filename").unwrap();
+        let newer_mtime = SystemTime::UNIX_EPOCH + Duration::from_secs(1_738_500_000);
+        filetime::set_file_mtime(
+            &earlier_name,
+            filetime::FileTime::from_system_time(newer_mtime),
+        )
+        .unwrap();
+
+        let config = Config {
+            classification: ClassificationRule::YearMonth,
+            month_format: MonthFormat::Nested,
+            image_extensions: vec!["jpg".to_string()],
+            ..Default::default()
+        };
+        let water_level = IncrementalWaterLevel::scan_output_directory(output_dir, &config)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            water_level.newest_file_path,
+            PathBuf::from("2025")
+                .join("02")
+                .join("Photos")
+                .join("IMG_20250202_000001.jpg")
+        );
+        assert_eq!(
+            water_level.newest_timestamp,
+            NaiveDateTime::parse_from_str("2025-02-02 00:00:01", "%Y-%m-%d %H:%M:%S").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_water_level_extract_timestamp_year_only() {
         let output_dir = PathBuf::from("/output");
 
         // Test year only format: /output/2024/photo.jpg
         let file_path = PathBuf::from("/output/2024/photo.jpg");
-        let ts = IncrementalWatermark::extract_timestamp_from_path(
+        let ts = IncrementalWaterLevel::extract_timestamp_from_path(
             &file_path,
             &output_dir,
             ClassificationRule::Year,
